@@ -97,7 +97,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 'use strict';
-const VERSION = '1.2.1';
+const VERSION = '1.3.0';
 const EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec';
 const PRINT_URL = EXEC + '?p=print';
 const $ = id => document.getElementById(id);
@@ -244,11 +244,14 @@ function showHome() {
     ${notes.length ? '<button class="btn ghost" id="clr">إخفاء الإشعارات</button>' : ''}
     <button class="btn big" id="bPick">استلام طلبات${n ? ' (جارٍ: ' + n + ')' : ''}</button>
     <button class="btn big dark" id="bMine">طلباتي</button>
-    ${S.user.admin ? `<h2>وظائف المدير</h2><button class="btn big dark" id="bRet">استلام مرتجع (مسح)</button><a class="btn terra" href="${PRINT_URL}" target="_blank" rel="noopener">طباعة البوالص والاستبدال</a>` : ''}
+    ${balHtml(bal)}
+    ${S.user.admin ? `<h2>وظائف المدير</h2><button class="btn big terra" id="bBoard">لوحة المندوبين والتسويات</button><button class="btn big dark" id="bRet">استلام مرتجع (مسح)</button><a class="btn terra" href="${PRINT_URL}" target="_blank" rel="noopener">طباعة البوالص والاستبدال</a>` : ''}
     <button class="btn ghost" id="bOut">تسجيل الخروج</button>`);
   $('bPick').onclick = () => { unlockAudio(); showPickup(); };
   $('bMine').onclick = showMine;
   if ($('bRet')) $('bRet').onclick = () => { unlockAudio(); showReturnScan(); };
+  if ($('bBoard')) $('bBoard').onclick = showBoard;
+  loadBalance();
   $('bOut').onclick = () => { if (confirm('هل تريد تسجيل الخروج من هذا الجهاز؟')) logout(false); };
   if ($('clr')) $('clr').onclick = () => { notes = []; store.set('sol_notes', notes); showHome(); };
 }
@@ -640,6 +643,97 @@ function formExRefused(o, bag) {
       doneScreen(`<div class="summary">الطلب #${esc(o.order)}: رفض العميل الحذاء الجديد<br><small>مستحقك ${VISIT_FEE} جنيهًا</small></div>
         <div class="banner" style="background:#fbeed6;color:var(--warn)">أعد الحذاء الجديد إلى المخزن.</div>${queuedNote(r)}${geoNote(p)}`);
     });
+  };
+}
+
+// ───────── money: own balance (everyone) + admin board & settlement (Task 7) ─────────
+let bal = store.get('sol_bal', null);          // last «myBalance» answer
+const balColor = n => n < 0 ? 'var(--ok)' : n > 0 ? 'var(--terra)' : 'var(--muted)';
+const balText = b => b.balance > 0 ? `معك ${money(b.balance)} جنيهًا يجب تسليمها` : b.balance < 0 ? `لك عند المتجر ${money(-b.balance)} جنيهًا` : 'حسابك متوازن — لا مبالغ مستحقة';
+function balHtml(b) {
+  if (!b) return '<div class="card muted" id="balCard">رصيدي: جارٍ التحميل…</div>';
+  return `<div class="card" id="balCard"><div class="top"><b>رصيدي</b><span class="amt" style="color:${balColor(b.balance)}">${money(b.balance)} ج</span></div>
+    <div><b>${balText(b)}</b></div>
+    <div class="muted">منذ آخر تسوية${b.last ? ' (' + esc(b.last) + ')' : ''}: حصّلت ${money(b.since.collected)} · مستحقك ${money(b.since.fee)} عن ${b.since.visits} زيارة${b.before ? ' · رصيد سابق ' + money(b.before) : ''}</div>
+    ${b.history && b.history.length ? '<details><summary class="muted">آخر التسويات</summary>' + b.history.map(h => `<div class="muted">${esc(h.at)}: المطلوب ${money(h.required)} · ${h.received >= 0 ? 'سلّمت ' + money(h.received) : 'استلمت ' + money(-h.received)} · الرصيد بعدها ${money(h.balance)}${h.note ? ' — ' + esc(h.note) : ''}</div>`).join('') + '</details>' : ''}</div>`;
+}
+async function loadBalance() {
+  const r = await api('myBalance');
+  if (!r.ok) return;
+  bal = r; store.set('sol_bal', bal);
+  const el = $('balCard'); if (el && current === 'home') el.outerHTML = balHtml(bal);
+}
+
+let board = null;
+async function showBoard() {
+  view('board', '<h1>لوحة المندوبين والتسويات</h1><p class="muted">جارٍ التحميل…</p>');
+  const r = await api('board', {}, 60000);
+  if (current !== 'board') return;
+  if (!r.ok) { view('board', `<h1>لوحة المندوبين والتسويات</h1><div class="banner">${esc(r.error || 'تعذّر التحميل')}</div><button class="btn ghost" id="back">رجوع</button>`); $('back').onclick = showHome; return; }
+  board = r; renderBoard();
+}
+function renderBoard() {
+  const b = board, k = b.k;
+  const tile = (label, val, red) => `<div class="card" style="margin:0;${red ? 'border-color:var(--bad);color:var(--bad)' : ''}"><div class="muted">${label}</div><div class="num">${val}</div></div>`;
+  view('board', `<h1>لوحة المندوبين والتسويات</h1>
+    <p class="muted">آخر تحديث ${esc(b.at)} — الأرقام نفسها في الشيت (الداشبورد).</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${tile('لم تُطبع بعد', k.notPrinted)}${tile('طُبعت ولم تُستلم', k.printedWaiting)}
+      ${tile('مع المندوبين', k.withCouriers + ' طلب')}${tile('المطلوب تحصيله منهم', money(k.withAmount) + ' ج')}
+      ${tile('سُلِّم اليوم', k.doneToday)}${tile('حُصِّل اليوم', money(k.collectedToday) + ' ج')}
+      ${tile('مرتجعات خارج المخزن', k.returnsOut + ' طرد')}${tile('أموال لدى المندوبين', money(k.moneyWith) + ' ج')}
+      ${k.owedTo ? tile('مستحق للمندوبين', money(k.owedTo) + ' ج') : ''}${tile('تنبيهات', k.alerts, k.alerts > 0)}
+    </div>
+    <h2>التنبيهات (${b.alerts.length})</h2>
+    ${b.alerts.length ? b.alerts.map(a => `<div class="banner"><div>${esc(a.label)}${a.order ? ' — #' + esc(a.order) : ''}${a.courier ? ' — ' + esc(a.courier) : ''}</div><div style="font-weight:600">${esc(a.text)}</div></div>`).join('') : '<div class="banner okb">لا توجد تنبيهات ✓</div>'}
+    <h2>المندوبون</h2>
+    ${b.couriers.map(c => `<div class="card">
+      <div class="top"><span class="num">${esc(c.name)}</span><span class="amt" style="color:${balColor(c.balance)}">${money(c.balance)} ج</span></div>
+      <div class="muted">معه ${c.orders} طلب (المطلوب تحصيله ${money(c.amount)}) · مرتجعات ${c.returns} · اليوم: ${c.visitsToday} زيارة، سلّم ${c.doneToday}، حصّل ${money(c.collectedToday)}</div>
+      <div class="muted">منذ آخر تسوية${c.last ? ' (' + esc(c.last) + ')' : ''}: حصّل ${money(c.since.collected)} − مستحقه ${money(c.since.fee)} (${c.since.visits} زيارة)${c.before ? ' + رصيد سابق ' + money(c.before) : ''}</div>
+      <div><b>${c.balance > 0 ? 'المطلوب أن يسلّمه: ' + money(c.balance) + ' جنيهًا' : c.balance < 0 ? 'المتجر مدين له بـ ' + money(-c.balance) + ' جنيهًا' : 'لا مبالغ مستحقة'}</b></div>
+      ${c.code ? `<button class="btn terra" data-settle="${esc(c.code)}">تسوية</button>` : ''}
+    </div>`).join('')}
+    <button class="btn ghost" id="refresh">تحديث</button>
+    <button class="btn ghost" id="back">رجوع</button>`);
+  $('back').onclick = showHome;
+  $('refresh').onclick = showBoard;
+  $('app').querySelectorAll('[data-settle]').forEach(x => x.onclick = () => settleSheet(x.dataset.settle));
+}
+function settleSheet(code) {
+  const c = board.couriers.find(x => x.code === code); if (!c) return;
+  const owes = c.balance >= 0, qidS = qid();
+  $('sheet').innerHTML = `<h2>تسوية — ${esc(c.name)}</h2>
+    <div class="muted">حصّل منذ آخر تسوية ${money(c.since.collected)} − مستحقه ${money(c.since.fee)} (${c.since.visits} زيارة)${c.before ? ' + رصيد سابق ' + money(c.before) : ''}</div>
+    <div class="summary" style="margin:10px 0">${owes ? 'المطلوب أن يسلّمه' : 'المتجر مدين له بـ'} ${money(Math.abs(c.balance))} جنيهًا</div>
+    <label class="reason"><input type="radio" name="dir" value="in" ${owes ? 'checked' : ''}> استلمت منه مبلغًا</label>
+    <label class="reason"><input type="radio" name="dir" value="out" ${owes ? '' : 'checked'}> دفعت له مبلغًا</label>
+    <input id="sAmt" class="field" inputmode="decimal" value="${Math.abs(c.balance)}">
+    <input id="sNote" class="field" style="font-size:17px;direction:rtl;text-align:right;margin-top:8px" placeholder="ملاحظة (اختيارية)">
+    <div class="muted" id="sAfter"></div>
+    <div class="err" id="sErr"></div>
+    <div class="row"><button class="btn ghost" id="sNo">إلغاء</button><button class="btn terra" id="sOk">تسجيل التسوية</button></div>`;
+  $('modal').classList.remove('hidden');
+  const val = () => {
+    const s = String($('sAmt').value).trim(), n = Number(s), out = document.querySelector('input[name=dir]:checked').value === 'out';
+    return s !== '' && isFinite(n) && n >= 0 ? (out ? -n : n) : null;
+  };
+  const upd = () => {
+    const v = val(), after = v == null ? null : Math.round((c.balance - v) * 100) / 100;
+    $('sAfter').innerHTML = after == null ? '' : after === 0 ? 'الرصيد بعد التسوية: صفر ✓' : `الرصيد بعد التسوية: <b>${money(after)}</b> جنيهًا (${after > 0 ? 'يبقى معه' : 'يبقى له عند المتجر'}) — يُرحَّل إلى التسوية القادمة`;
+  };
+  $('sAmt').oninput = upd; $('sheet').querySelectorAll('input[name=dir]').forEach(x => x.onchange = upd); upd();
+  $('sNo').onclick = () => $('modal').classList.add('hidden');
+  $('sOk').onclick = async () => {
+    const v = val(); if (v == null) { $('sErr').textContent = 'أدخل المبلغ بالأرقام'; return; }
+    if (!confirm(`تسجيل ${v >= 0 ? 'استلام ' + money(v) + ' جنيهًا من' : 'دفع ' + money(-v) + ' جنيهًا إلى'} ${c.name}؟`)) return;
+    $('sOk').disabled = true; $('sErr').textContent = '';
+    const r = await api('settle', {courier: code, received: v, expect: c.balance, note: $('sNote').value.trim(), qid: qidS}, 40000);
+    $('sOk').disabled = false;
+    if (!r.ok) { $('sErr').textContent = r.offline ? 'التسوية تحتاج اتصالًا بالإنترنت' : (r.error || 'تعذّر التسجيل'); if (r.stale) setTimeout(() => { $('modal').classList.add('hidden'); showBoard(); }, 2500); return; }
+    $('modal').classList.add('hidden');
+    flash('ok', 'سُجّلت التسوية ✓', r.already ? 'سُجّلت من قبل' : 'الرصيد بعدها ' + money(r.balance) + ' جنيهًا');
+    showBoard();
   };
 }
 
