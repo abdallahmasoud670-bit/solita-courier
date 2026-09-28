@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1C1C1A">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="icon-192.png">
+<title>سوليتا — تقييم تجربة التوصيل</title>
+<style>
+  :root { --dark:#1C1C1A; --olive:#4A5140; --ivory:#F5F1E8; --terra:#A65F45; --line:#CFC5B3; --muted:#6B665C; --bad:#B3261E; --gold:#C89B3C; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; background:var(--ivory); color:var(--dark); font:17px/1.6 -apple-system,"SF Arabic","Segoe UI",Tahoma,"Noto Sans Arabic",sans-serif; }
+  header { background:var(--dark); color:var(--ivory); padding:calc(18px + env(safe-area-inset-top)) 16px 18px; text-align:center; }
+  header .brand { font-weight:800; font-size:24px; letter-spacing:3px; }
+  header .sub { font-size:14px; opacity:.8; margin-top:2px; }
+  main { max-width:520px; margin:0 auto; padding:18px 16px 40px; }
+  h1 { font-size:22px; margin:4px 0 6px; }
+  .lead { color:var(--muted); margin:0 0 16px; }
+  .q { background:#fffdf8; border:1px solid var(--line); border-radius:16px; padding:14px 16px; margin:12px 0; }
+  .q .t { font-weight:800; margin-bottom:10px; }
+  .q .n { display:inline-flex; width:26px; height:26px; border-radius:50%; background:var(--olive); color:var(--ivory); font-size:14px; align-items:center; justify-content:center; margin-inline-end:8px; }
+  .stars { display:flex; flex-direction:row; justify-content:center; gap:6px; }
+  .stars button { font-size:40px; line-height:1; background:none; border:0; color:#d9d0bf; cursor:pointer; padding:4px; min-width:48px; min-height:52px; }
+  .stars button.on { color:var(--gold); }
+  .hint { text-align:center; color:var(--muted); font-size:14px; min-height:1.4em; }
+  .yn { display:flex; gap:10px; }
+  .yn button { flex:1; min-height:52px; font:inherit; font-weight:700; border-radius:12px; border:2px solid var(--line); background:#fffdf8; color:var(--dark); cursor:pointer; }
+  .yn button.on { background:var(--olive); border-color:var(--olive); color:var(--ivory); }
+  textarea { width:100%; min-height:96px; font:inherit; padding:10px 12px; border:2px solid var(--line); border-radius:12px; background:#fff; resize:vertical; }
+  textarea:focus { outline:none; border-color:var(--olive); }
+  .btn { display:block; width:100%; min-height:58px; border:0; border-radius:14px; font:inherit; font-weight:800; font-size:19px; background:var(--terra); color:#fff; margin:18px 0 8px; cursor:pointer; }
+  .btn[disabled] { opacity:.5; }
+  .err { color:var(--bad); font-weight:700; min-height:1.5em; text-align:center; }
+  .msg { text-align:center; padding:30px 10px; }
+  .msg .big { font-size:52px; }
+  .muted { color:var(--muted); font-size:14px; }
+  footer { text-align:center; color:var(--muted); font-size:13px; padding:0 0 28px; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<header><div class="brand">SOLITA</div><div class="sub">سوليتا — أحذية</div></header>
+<main id="app"><div class="msg muted">جارٍ التحميل…</div></main>
+<footer>شكرًا لاختياركم سوليتا · لا يُنشر تقييمكم، ويُستخدم لتحسين خدمة التوصيل فقط.</footer>
+<script>
+'use strict';
+const EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const R = (new URLSearchParams(location.search).get('r') || '').trim();
+const A = {stars: 0, called: '', onTime: ''};
+const LABELS = ['', 'سيئ جدًا', 'سيئ', 'مقبول', 'جيد', 'ممتاز'];
+
+async function call(body) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
+  try {
+    const r = await fetch(EXEC, {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: JSON.stringify(body), credentials: 'omit', signal: ctl.signal});
+    return await r.json();
+  } catch (e) { return {ok: false, error: 'تعذّر الاتصال بالإنترنت، يُرجى المحاولة مرة أخرى'}; }
+  finally { clearTimeout(t); }
+}
+function msg(icon, title, sub) {
+  $('app').innerHTML = `<div class="msg"><div class="big">${icon}</div><h1>${esc(title)}</h1>${sub ? `<p class="lead">${esc(sub)}</p>` : ''}</div>`;
+}
+function thanks() { msg('🤍', 'شكرًا لكم', 'وصلنا تقييمكم، ونسعد بخدمتكم دائمًا.'); }
+
+function form(info) {
+  const who = info.courier ? 'المندوب ' + esc(info.courier) : 'المندوب';
+  $('app').innerHTML = `
+    <h1>كيف كانت تجربة التوصيل؟</h1>
+    <p class="lead">طلبكم رقم ${esc(info.order)} — يسعدنا أن نعرف رأيكم في ${who}، ولن يستغرق ذلك أكثر من دقيقة.</p>
+    <div class="q"><div class="t"><span class="n">1</span>هل كان ${who} محترمًا في تعامله معكم؟</div>
+      <div class="stars" id="stars">${[1, 2, 3, 4, 5].map(n => `<button type="button" data-s="${n}" aria-label="${n} من 5">★</button>`).join('')}</div>
+      <div class="hint" id="sHint">اختاروا من نجمة واحدة إلى خمس نجوم</div></div>
+    <div class="q"><div class="t"><span class="n">2</span>هل اتصل بكم المندوب قبل الوصول؟</div>
+      <div class="yn" data-k="called"><button type="button" data-v="yes">نعم</button><button type="button" data-v="no">لا</button></div></div>
+    <div class="q"><div class="t"><span class="n">3</span>هل وصل المندوب في الموعد المتفق عليه؟</div>
+      <div class="yn" data-k="onTime"><button type="button" data-v="yes">نعم</button><button type="button" data-v="no">لا</button></div></div>
+    <div class="q"><div class="t"><span class="n">4</span>هل لديكم تعليق؟ <span class="muted">(اختياري)</span></div>
+      <textarea id="cm" maxlength="500" placeholder="اكتبوا ملاحظاتكم هنا…"></textarea></div>
+    <div class="err" id="err"></div>
+    <button class="btn" id="send">إرسال التقييم</button>`;
+  $('stars').querySelectorAll('button').forEach(b => b.onclick = () => {
+    A.stars = +b.dataset.s;
+    $('stars').querySelectorAll('button').forEach(x => x.classList.toggle('on', +x.dataset.s <= A.stars));
+    $('sHint').textContent = A.stars + ' من 5 — ' + LABELS[A.stars];
+  });
+  document.querySelectorAll('.yn').forEach(g => g.querySelectorAll('button').forEach(b => b.onclick = () => {
+    A[g.dataset.k] = b.dataset.v;
+    g.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  }));
+  $('send').onclick = async () => {
+    $('err').textContent = '';
+    if (!A.stars) return $('err').textContent = 'يُرجى اختيار عدد النجوم للسؤال الأول';
+    if (!A.called || !A.onTime) return $('err').textContent = 'يُرجى الإجابة عن السؤالين الثاني والثالث';
+    $('send').disabled = true; $('send').textContent = 'جارٍ الإرسال…';
+    const r = await call({api: 'rateSubmit', r: R, stars: A.stars, called: A.called, onTime: A.onTime, comment: $('cm').value.trim()});
+    if (r.ok) return thanks();
+    $('send').disabled = false; $('send').textContent = 'إرسال التقييم';
+    $('err').textContent = r.error || 'تعذّر الإرسال، يُرجى المحاولة مرة أخرى';
+  };
+}
+
+(async () => {
+  if (!/^\d{1,10}-[0-9a-f]{16}$/.test(R)) return msg('🔗', 'رابط التقييم غير صحيح', 'يُرجى فتح الرابط كما وصلكم في الرسالة.');
+  const r = await call({api: 'rateInfo', r: R});
+  if (!r.ok) return msg('ℹ️', r.error || 'تعذّر التحميل', 'إن استمرت المشكلة يُرجى التواصل مع خدمة العملاء: 01122734281');
+  if (r.done) return msg('🤍', 'تم تقييم هذا الطلب من قبل', 'شكرًا لكم، فقد وصلنا تقييمكم.');
+  form(r);
+})();
+</script>
+</body>
+</html>

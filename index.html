@@ -80,6 +80,9 @@
   .reason.off { opacity:.6; }
   .say { font-size:20px; line-height:1.8; font-weight:700; border:3px solid var(--terra); }
   textarea.field { font:inherit; }
+  .btn.cr.on { background:var(--olive); color:var(--ivory); border-color:var(--olive); }
+  .btn.cr.on[data-cr=bad] { background:var(--bad); border-color:var(--bad); }
+  .tip { background:#eef0e8; color:var(--olive); border-radius:10px; padding:6px 10px; margin:6px 0; font-weight:700; font-size:15px; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -97,7 +100,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 'use strict';
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec';
 const PRINT_URL = EXEC + '?p=print';
 const $ = id => document.getElementById(id);
@@ -245,12 +248,14 @@ function showHome() {
     <button class="btn big" id="bPick">استلام طلبات${n ? ' (جارٍ: ' + n + ')' : ''}</button>
     <button class="btn big dark" id="bMine">طلباتي</button>
     ${balHtml(bal)}
-    ${S.user.admin ? `<h2>وظائف المدير</h2><button class="btn big terra" id="bBoard">لوحة المندوبين والتسويات</button><button class="btn big dark" id="bRet">استلام مرتجع (مسح)</button><a class="btn terra" href="${PRINT_URL}" target="_blank" rel="noopener">طباعة البوالص والاستبدال</a>` : ''}
+    ${S.user.admin ? `<h2>وظائف المدير</h2><button class="btn big terra" id="bBoard">لوحة المندوبين والتسويات</button><button class="btn big" id="bRate">بانتظار التقييم (واتساب)</button><button class="btn big dark" id="bPerf">أداء المندوبين</button><button class="btn big dark" id="bRet">استلام مرتجع (مسح)</button><a class="btn terra" href="${PRINT_URL}" target="_blank" rel="noopener">طباعة البوالص والاستبدال</a>` : ''}
     <button class="btn ghost" id="bOut">تسجيل الخروج</button>`);
   $('bPick').onclick = () => { unlockAudio(); showPickup(); };
   $('bMine').onclick = showMine;
   if ($('bRet')) $('bRet').onclick = () => { unlockAudio(); showReturnScan(); };
   if ($('bBoard')) $('bBoard').onclick = showBoard;
+  if ($('bRate')) $('bRate').onclick = showRatePending;
+  if ($('bPerf')) $('bPerf').onclick = () => showPerf('week');
   loadBalance();
   $('bOut').onclick = () => { if (confirm('هل تريد تسجيل الخروج من هذا الجهاز؟')) logout(false); };
   if ($('clr')) $('clr').onclick = () => { notes = []; store.set('sol_notes', notes); showHome(); };
@@ -337,6 +342,7 @@ function mineCard(o) {
     <div class="muted">${esc(o.address)}</div>
     <div class="muted">${o.items.map(esc).join('، ')} · ${o.bags} طرود</div>
     ${o.note ? `<div class="muted">ملاحظة العميل: ${esc(o.note)}</div>` : ''}
+    ${(o.tips || []).map(t => `<div class="tip">💡 ${esc(t)}</div>`).join('')}
     ${o.exchange ? `<div class="banner" style="background:var(--terra);color:#fff">استبدال — سلّم: ${esc(o.exchange.items.join('، '))}<br>واستلم الحذاء القديم: ${esc(o.exchange.old.join('، '))} في «كيس الرجوع»</div>` : ''}
     ${o.canceled ? '<div class="banner">هذا الطلب ملغى — لا تسلّمه وأعده إلى المخزن</div>' : ''}
     ${o.reprint ? warnBox('تغيّر المبلغ المطلوب — المبلغ الصحيح هو المعروض هنا وليس المطبوع على البوليصة') : ''}
@@ -429,6 +435,13 @@ function showActions(id, bag) {
 
 // common submit: GPS → send (or queue) → result
 async function submitAction(btn, apiName, body, label, onOk) {
+  if (CR_APIS.includes(apiName) || (apiName === 'postpone' && body.visited === true)) {
+    const c = crRead();
+    if (!c) return flash('bad', 'قيّم العميل أولًا', 'ممتاز / عادي / سيئ');
+    if (c.r === 'bad' && !c.reason) return flash('bad', 'اختر سبب التقييم «سيئ»');
+    if (c.r === 'bad' && c.reason === 'other' && c.note.length < 3) return flash('bad', 'اكتب سبب التقييم «سيئ» في الملاحظة');
+    body.crate = c;
+  }
   btn.disabled = true; btn.textContent = 'جارٍ تحديد الموقع…';
   const p = await getPos(10000);
   btn.textContent = 'جارٍ الإرسال…';
@@ -444,6 +457,29 @@ const geoNote = p => p ? '' : warnBox('الموقع غير متاح — سُجّ
 const queuedNote = r => r.queued ? warnBox('لا يوجد اتصال الآن — حُفظ الإجراء وسيُرسل تلقائيًا عند عودة الاتصال.') : '';
 const TXT = 'style="text-align:right;direction:rtl;font-size:18px"';
 
+// ───────── courier rates the customer after every visit (Task 8) — the customer never sees it ─────────
+const CR_APIS = ['deliver', 'fail', 'partial', 'exchangeDone', 'exchangeRefused'];
+const CR_OPTS = [['good', 'ممتاز'], ['ok', 'عادي'], ['bad', 'سيئ']];
+const CR_REASONS = [['rude', 'تعامل غير لائق'], ['late', 'تأخير طويل في الاستلام'], ['price', 'جدال في السعر'], ['address', 'عنوان صعب ولم يرد على الوصف'], ['fitting', 'قياس مبالغ فيه'], ['other', 'أخرى']];
+function crHtml() {
+  return `<div id="crBox" class="card"><b>تقييمك للعميل (إلزامي)</b>
+    <div class="acts">${CR_OPTS.map(([k, t]) => `<button type="button" class="btn ghost cr" data-cr="${k}">${t}</button>`).join('')}</div>
+    <div id="crBad" class="hidden"><p class="muted" style="margin:6px 0">سبب التقييم «سيئ»:</p>
+      ${CR_REASONS.map(([k, t]) => `<label class="reason"><input type="radio" name="crr" value="${k}"> <span>${t}</span></label>`).join('')}
+      <textarea id="crNote" class="field" rows="2" placeholder="ملاحظة (اختيارية، وإلزامية عند «أخرى»)" ${TXT}></textarea></div>
+    <div class="muted" style="font-size:13px">لا يرى العميل هذا التقييم.</div></div>`;
+}
+function crRead() {
+  const on = $('app').querySelector('[data-cr].on'); if (!on) return null;
+  const bad = on.dataset.cr === 'bad', rs = $('app').querySelector('input[name=crr]:checked');
+  return {r: on.dataset.cr, reason: bad && rs ? rs.value : '', note: bad && $('crNote') ? $('crNote').value.trim() : ''};
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-cr]'); if (!b) return;
+  $('app').querySelectorAll('[data-cr]').forEach(x => x.classList.toggle('on', x === b));
+  $('crBad').classList.toggle('hidden', b.dataset.cr !== 'bad');
+});
+
 function formDeliver(o, bag) {
   const expect = o.prepaid ? 0 : o.amount;
   view('form', `<h1>تم التسليم — #${esc(o.order)}</h1>
@@ -451,6 +487,7 @@ function formDeliver(o, bag) {
     <input id="amt" class="field" inputmode="numeric" pattern="[0-9]*" value="${expect}">
     <div id="whyBox" class="hidden"><p class="err">المبلغ يختلف عن المطلوب (${money(expect)} جنيهًا) — اكتب السبب:</p>
       <textarea id="why" class="field" rows="3" ${TXT}></textarea></div>
+    ${crHtml()}
     <button class="btn big" id="ok">تأكيد التسليم وتحصيل ${money(expect)} جنيهًا</button>
     <button class="btn ghost" id="back">رجوع</button>`);
   $('amt').oninput = () => {
@@ -478,6 +515,7 @@ function formFail(o, bag) {
     ${FAIL_REASONS.map(([k, t]) => `<label class="reason ${rule[k] ? 'off' : ''}"><input type="radio" name="rs" value="${k}" ${rule[k] ? 'disabled' : ''}> <span>${t}${rule[k] ? `<small>${rule[k]}</small>` : ''}</span></label>`).join('')}
     <div id="rsInfo"></div>
     <textarea id="note" class="field" rows="2" placeholder="ملاحظة (إلزامية عند اختيار «أخرى»)" ${TXT}></textarea>
+    ${crHtml()}
     <button class="btn big terra" id="ok">تسجيل عدم التسليم</button>
     <button class="btn ghost" id="back">رجوع</button>`);
   $('app').querySelectorAll('input[name=rs]').forEach(i => i.onchange = () => {
@@ -507,8 +545,11 @@ function formPostpone(o, bag) {
     <input id="dt" class="field" type="date" min="${min}" max="${max}" value="${min}">
     <label class="reason"><input type="checkbox" id="vis"> <span>ذهبتُ إلى العميل في العنوان (زيارة فعلية)<small>تُحتسب الزيارة ${VISIT_FEE} جنيهًا</small></span></label>
     <textarea id="note" class="field" rows="2" placeholder="ملاحظة (اختيارية)" ${TXT}></textarea>
+    ${crHtml()}
     <button class="btn big dark" id="ok">تأكيد التأجيل</button>
     <button class="btn ghost" id="back">رجوع</button>`);
+  $('crBox').classList.add('hidden');
+  $('vis').onchange = () => $('crBox').classList.toggle('hidden', !$('vis').checked);
   $('back').onclick = () => showActions(o.order, bag);
   $('ok').onclick = () => {
     const d = $('dt').value, vis = $('vis').checked;
@@ -556,6 +597,7 @@ function formPartial(o, bag) {
     <p>المبلغ الذي حصّلته فعلًا:</p>
     <input id="amt" class="field" inputmode="numeric" pattern="[0-9]*">
     <div id="whyBox" class="hidden"><p class="err">المبلغ يختلف عن المطلوب — اكتب السبب:</p><textarea id="why" class="field" rows="2" ${TXT}></textarea></div>
+    ${crHtml()}
     <button class="btn big" id="ok">تأكيد التسليم الجزئي</button>
     <button class="btn ghost" id="back">رجوع</button>`);
   let typed = false;
@@ -609,6 +651,7 @@ function formExDone(o, bag) {
     <p>المبلغ الذي حصّلته فعلًا (المطلوب ${money(expect)} جنيهًا):</p>
     <input id="amt" class="field" inputmode="numeric" pattern="[0-9]*" value="${expect}">
     <div id="whyBox" class="hidden"><p class="err">المبلغ يختلف عن المطلوب — اكتب السبب:</p><textarea id="why" class="field" rows="2" ${TXT}></textarea></div>
+    ${crHtml()}
     <button class="btn big" id="ok">تأكيد الاستبدال</button>
     <button class="btn ghost" id="back">رجوع</button>`);
   $('amt').oninput = () => $('whyBox').classList.toggle('hidden', +$('amt').value.replace(/\D/g, '') === expect);
@@ -631,6 +674,7 @@ function formExRefused(o, bag) {
     <p>المبلغ الذي حصّلته (اكتب 0 إن لم يُحصَّل شيء):</p>
     <input id="amt" class="field" inputmode="numeric" pattern="[0-9]*" value="0">
     <textarea id="note" class="field" rows="2" placeholder="سبب الرفض" ${TXT}></textarea>
+    ${crHtml()}
     <button class="btn big terra" id="ok">تسجيل الرفض</button>
     <button class="btn ghost" id="back">رجوع</button>`);
   $('back').onclick = () => showActions(o.order, bag);
@@ -735,6 +779,72 @@ function settleSheet(code) {
     flash('ok', 'سُجّلت التسوية ✓', r.already ? 'سُجّلت من قبل' : 'الرصيد بعدها ' + money(r.balance) + ' جنيهًا');
     showBoard();
   };
+}
+
+// ───────── admin: «بانتظار التقييم» + performance (Task 8) ─────────
+let rateList = null;
+async function showRatePending() {
+  view('rate', '<h1>بانتظار التقييم</h1><p class="muted">جارٍ التحميل…</p>');
+  const r = await api('ratePending', {}, 60000);
+  if (current !== 'rate') return;
+  if (!r.ok) { view('rate', `<h1>بانتظار التقييم</h1><div class="banner">${esc(r.error || 'تعذّر التحميل')}</div><button class="btn ghost" id="back">رجوع</button>`); $('back').onclick = showHome; return; }
+  rateList = r.list; renderRatePending();
+}
+function renderRatePending() {
+  const L = rateList, open = L.filter(x => !x.sent), sent = L.filter(x => x.sent);
+  const card = x => `<div class="card"><div class="top"><span class="num">#${esc(x.order)}</span><span class="tag ${x.sent ? 'ok' : 'unv'}">${x.sent ? 'أُرسل ' + esc(x.sent) : 'لم يُرسل'}</span></div>
+    <div><b>${esc(x.customer)}</b> · <span dir="ltr">${esc(x.phone)}</span></div>
+    <div class="muted">سلّمه ${esc(x.courier)} · ${esc(x.at)}</div>
+    <a class="btn wa" href="https://wa.me/${waNum(x.phone)}?text=${encodeURIComponent(x.text)}" target="_blank" rel="noopener" data-rsent="${esc(x.order)}">${x.sent ? 'إرسال مرة أخرى عبر واتساب' : 'إرسال رابط التقييم عبر واتساب'}</a></div>`;
+  view('rate', `<h1>بانتظار التقييم</h1>
+    <p class="muted">طلبات سُلّمت خلال آخر 30 يومًا ولم يقيّمها العميل بعد. اضغط الزر لفتح واتساب برسالة جاهزة فيها رابط التقييم.</p>
+    ${open.length ? open.map(card).join('') : '<div class="banner okb">لا توجد طلبات تنتظر الإرسال ✓</div>'}
+    ${sent.length ? `<h2>أُرسل الرابط ولم يُقيَّم بعد (${sent.length})</h2>` + sent.map(card).join('') : ''}
+    <button class="btn ghost" id="refresh">تحديث</button><button class="btn ghost" id="back">رجوع</button>`);
+  $('back').onclick = showHome; $('refresh').onclick = showRatePending;
+  $('app').querySelectorAll('[data-rsent]').forEach(a => a.onclick = () => {
+    const id = a.dataset.rsent, x = rateList.find(y => y.order === id);
+    queue.push({qid: qid(), api: 'rateSent', body: {order: id}, at: Date.now(), label: 'إرسال رابط تقييم الطلب ' + id}); saveQueue();
+    if (x && !x.sent) x.sent = 'الآن';
+    setTimeout(() => { flushQueue(); if (current === 'rate') renderRatePending(); }, 600);
+  });
+}
+
+let perfData = null;
+async function showPerf(period) {
+  view('perf', '<h1>أداء المندوبين</h1><p class="muted">جارٍ الحساب…</p>');
+  const r = await api('perf', {period}, 60000);
+  if (current !== 'perf') return;
+  if (!r.ok) { view('perf', `<h1>أداء المندوبين</h1><div class="banner">${esc(r.error || 'تعذّر التحميل')}</div><button class="btn ghost" id="back">رجوع</button>`); $('back').onclick = showHome; return; }
+  perfData = r; renderPerf();
+}
+function renderPerf() {
+  const d = perfData, p = x => x == null ? '—' : x + '%';
+  const line = (k, val) => `<div style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--line);padding:3px 0"><span class="muted">${k}</span><b style="text-align:left">${val}</b></div>`;
+  const stars = n => n == null ? '—' : n + ' / 5';
+  view('perf', `<h1>أداء المندوبين</h1>
+    <div class="acts"><button class="btn ${d.period === 'week' ? '' : 'ghost'}" id="pW">آخر 7 أيام</button><button class="btn ${d.period === 'month' ? '' : 'ghost'}" id="pM">آخر 30 يومًا</button></div>
+    <p class="muted">من ${esc(d.from)} حتى ${esc(d.at)} — الملخّص نفسه في تبويب «أداء المندوبين» في الشيت (يُحدَّث كل ساعة).</p>
+    ${d.couriers.length ? '' : '<p>لا توجد بيانات في هذه الفترة.</p>'}
+    ${d.couriers.map(c => `<div class="card">
+      <div class="top"><span class="num">${esc(c.name)}</span><span class="amt">★ ${stars(c.rating.avg)}</span></div>
+      ${line('استلم', c.picked + ' طلب')}${line('سلّم', c.delivered + ' من ' + c.attempted + ' طلبًا زاره')}${line('نسبة التسليم', p(c.deliveryPct))}
+      ${line('مرتجعات / لم يتم', c.returns + (c.topReasons.length ? ' — ' + esc(c.topReasons.map(x => x.reason + ' ×' + x.n).join('، ')) : ''))}
+      ${line('متوسط الوقت من الاستلام إلى التسليم', c.avgHours == null ? '—' : c.avgHours + ' ساعة')}
+      ${line('اتصل قبل الوصول (حسب السجل)', p(c.calledBeforePct))}${line('اتصل قبل الوصول (حسب العملاء)', p(c.rating.calledPct))}
+      ${line('وصل في الموعد (حسب العملاء)', p(c.rating.onTimePct))}${line('متوسط تقييم العملاء', stars(c.rating.avg) + ' (' + c.rating.n + ' تقييم)')}
+      ${line('شكاوى', c.complaints)}${line('تنبيهات الموقع (نفس المكان / غير متاح)', c.gps.spot + ' / ' + c.gps.na)}
+      ${line('الرصيد', money(c.balance) + ' ج')}
+      ${line('تقييمه للعملاء', 'ممتاز ' + c.custDist['ممتاز'] + ' · عادي ' + c.custDist['عادي'] + ' · سيئ ' + c.custDist['سيئ'] + (c.custBadPct != null ? ' (' + c.custBadPct + '% سيئ)' : ''))}
+      ${c.custBadReasons.length ? `<div class="muted">أسباب «سيئ»: ${esc(c.custBadReasons.map(x => x.reason + ' ×' + x.n).join('، '))}</div>` : ''}
+      ${c.rating.comments.length ? '<div class="muted" style="margin-top:6px"><b>آخر تعليقات العملاء:</b></div>' + c.rating.comments.map(x => `<div class="muted">#${esc(x.order)} · ${esc(x.stars)}★ · ${esc(x.comment)} <small>(${esc(x.src)} ${esc(x.at)})</small></div>`).join('') : ''}
+    </div>`).join('')}
+    <h2>تقييم سيئ من الطرفين (${d.bothBad.length})</h2>
+    ${d.bothBad.length ? d.bothBad.map(b => `<div class="card"><div class="top"><span class="num">#${esc(b.order)}</span><span class="muted">${esc(b.courier)} · ${esc(b.at)}</span></div>
+      <div class="row"><div><div class="muted">العميل قيّم المندوب</div><b>${esc(b.custStars)}★</b> ${esc(b.custComment)}</div>
+      <div><div class="muted">المندوب قيّم العميل</div><b>سيئ</b> — ${esc(b.courierReason)} ${esc(b.courierNote)}</div></div></div>`).join('') : '<p class="muted">لا توجد حالات.</p>'}
+    <button class="btn ghost" id="back">رجوع</button>`);
+  $('pW').onclick = () => showPerf('week'); $('pM').onclick = () => showPerf('month'); $('back').onclick = showHome;
 }
 
 // admin: «استلام مرتجع» — every scan is written at once (qid per scan)
