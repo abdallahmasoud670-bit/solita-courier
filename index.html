@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Solita &#x2014; &#x627;&#x62E;&#x62A;&#x628;&#x627;&#x631; &#x627;&#x644;&#x645;&#x648;&#x628;&#x627;&#x64A;&#x644;</title>
+<style>
+  :root { --ink:#1C1C1A; --ivory:#F5F1E8; --olive:#4A5140; --sand:#B7AA96; --terra:#A65F45; --ok:#3F7D4E; --bad:#B03A2E; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ivory); color:var(--ink); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif; padding:12px 16px 40px; }
+  h1 { font-size:20px; margin:4px 0 2px; }
+  .sub { color:#6b665c; font-size:13px; margin-bottom:12px; }
+  .card { background:#fffdf8; border:1px solid var(--sand); border-radius:12px; padding:12px; margin:12px 0; }
+  .card h2 { font-size:17px; margin:0 0 8px; display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .st { font-size:13px; padding:2px 10px; border-radius:999px; background:#e7e1d4; white-space:nowrap; }
+  .st.pass { background:var(--ok); color:#fff; } .st.fail { background:var(--bad); color:#fff; }
+  button, .btn { display:inline-block; font:inherit; font-size:15px; border:0; border-radius:10px; padding:10px 14px; margin:4px 0 4px 6px; background:var(--olive); color:var(--ivory); text-decoration:none; cursor:pointer; }
+  button.alt, .btn.alt { background:var(--terra); } button.ghost { background:#e7e1d4; color:var(--ink); }
+  .log { font-size:13px; color:#4d4a42; word-break:break-all; margin-top:6px; white-space:pre-wrap; }
+  #reader { width:100%; max-width:360px; margin-top:8px; }
+  #summary li { margin:3px 0; }
+  .qr { background:#fff; display:inline-block; padding:8px; border-radius:8px; }
+  .row { display:flex; flex-wrap:wrap; align-items:center; }
+  small { color:#6b665c; }
+</style>
+</head>
+<body>
+<h1>Solita &#x2014; &#x627;&#x62E;&#x62A;&#x628;&#x627;&#x631; &#x627;&#x644;&#x645;&#x648;&#x628;&#x627;&#x64A;&#x644;</h1>
+<div class="sub">&#x646;&#x641;&#x651;&#x630; &#x627;&#x644;&#x627;&#x62E;&#x62A;&#x628;&#x627;&#x631;&#x627;&#x62A; &#x628;&#x627;&#x644;&#x62A;&#x631;&#x62A;&#x64A;&#x628;&#x60C; &#x62B;&#x645; &#x627;&#x636;&#x63A;&#x637; &#xAB;&#x625;&#x631;&#x633;&#x627;&#x644; &#x627;&#x644;&#x646;&#x62A;&#x627;&#x626;&#x62C;&#xBB; &#x641;&#x64A; &#x627;&#x644;&#x623;&#x633;&#x641;&#x644;.</div>
+
+<div class="card">
+  <h2>&#x627;&#x644;&#x646;&#x62A;&#x64A;&#x62C;&#x629; <span id="mode" class="st"></span></h2>
+  <ul id="summary"></ul>
+  <div class="log" id="dev"></div>
+</div>
+
+<div class="card">
+  <h2>&#x661;) &#x645;&#x633;&#x62D; &#x627;&#x644;&#x643;&#x648;&#x62F; (QR) &#x628;&#x627;&#x644;&#x643;&#x627;&#x645;&#x64A;&#x631;&#x627; <span class="st" id="s-qr">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
+  <div class="row">
+    <button id="qr-start">&#x62A;&#x634;&#x63A;&#x64A;&#x644; &#x627;&#x644;&#x643;&#x627;&#x645;&#x64A;&#x631;&#x627;</button>
+    <button id="qr-stop" class="ghost">&#x625;&#x64A;&#x642;&#x627;&#x641;</button>
+  </div>
+  <div id="reader"></div>
+  <div class="log" id="l-qr"></div>
+  <details style="margin-top:8px"><summary>&#x643;&#x648;&#x62F; &#x62A;&#x62C;&#x631;&#x64A;&#x628;&#x64A; &#x644;&#x644;&#x645;&#x633;&#x62D; (&#x627;&#x641;&#x62A;&#x62D; &#x647;&#x630;&#x647; &#x627;&#x644;&#x635;&#x641;&#x62D;&#x629; &#x639;&#x644;&#x649; &#x62C;&#x647;&#x627;&#x632; &#x622;&#x62E;&#x631; &#x648;&#x627;&#x645;&#x633;&#x62D;&#x647;)</summary>
+    <div class="row" style="gap:8px;margin-top:8px"><div class="qr" id="q1"></div><div class="qr" id="q2"></div></div>
+  </details>
+</div>
+
+<div class="card">
+  <h2>&#x662;) &#x627;&#x644;&#x645;&#x648;&#x642;&#x639; (GPS) <span class="st" id="s-gps">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
+  <button id="gps">&#x62A;&#x62D;&#x62F;&#x64A;&#x62F; &#x645;&#x648;&#x642;&#x639;&#x64A;</button>
+  <div class="log" id="l-gps"></div>
+</div>
+
+<div class="card">
+  <h2>&#x663;) &#x627;&#x644;&#x62D;&#x641;&#x638; &#x639;&#x644;&#x649; &#x627;&#x644;&#x62C;&#x647;&#x627;&#x632; <span class="st" id="s-ls">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
+  <div>&#x623;&#x639;&#x62F; &#x62A;&#x62D;&#x645;&#x64A;&#x644; &#x627;&#x644;&#x635;&#x641;&#x62D;&#x629; &#x645;&#x646; &#x627;&#x644;&#x645;&#x62A;&#x635;&#x641;&#x62D; (&#x623;&#x648; &#x623;&#x63A;&#x644;&#x642;&#x647;&#x627; &#x648;&#x627;&#x641;&#x62A;&#x62D;&#x647;&#x627; &#x645;&#x631;&#x629; &#x623;&#x62E;&#x631;&#x649;)&#x60C; &#x648;&#x64A;&#x62C;&#x628; &#x623;&#x646; &#x64A;&#x632;&#x64A;&#x62F; &#x627;&#x644;&#x639;&#x62F;&#x62F;.</div>
+  <button id="ls-reload" class="ghost">&#x625;&#x639;&#x627;&#x62F;&#x629; &#x62A;&#x62D;&#x645;&#x64A;&#x644; &#x627;&#x644;&#x635;&#x641;&#x62D;&#x629;</button>
+  <div class="log" id="l-ls"></div>
+</div>
+
+<div class="card">
+  <h2>&#x664;) &#x627;&#x644;&#x627;&#x62A;&#x635;&#x627;&#x644; &#x648;&#x648;&#x627;&#x62A;&#x633;&#x627;&#x628; <span class="st" id="s-link">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
+  <div class="row">
+    <a class="btn" id="tel1" href="tel:01122734281" target="_top">&#x627;&#x62A;&#x635;&#x627;&#x644; (&#x661;)</a>
+    <a class="btn" id="tel2" href="tel:01122734281" target="_blank">&#x627;&#x62A;&#x635;&#x627;&#x644; (&#x662;)</a>
+    <a class="btn alt" id="wa1" href="https://wa.me/201122734281?text=%D8%A7%D8%AE%D8%AA%D8%A8%D8%A7%D8%B1" target="_blank">&#x648;&#x627;&#x62A;&#x633;&#x627;&#x628;</a>
+    <a class="btn ghost" id="map1" href="https://www.google.com/maps/search/?api=1&query=%D9%85%D8%AF%D9%8A%D9%86%D8%A9%20%D9%86%D8%B5%D8%B1%20%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9" target="_blank">&#x62E;&#x631;&#x627;&#x626;&#x637;</a>
+  </div>
+  <div style="margin-top:6px">&#x647;&#x644; &#x641;&#x62A;&#x62D; &#x627;&#x644;&#x627;&#x62A;&#x635;&#x627;&#x644; &#x634;&#x627;&#x634;&#x629; &#x627;&#x644;&#x627;&#x62A;&#x635;&#x627;&#x644;&#x60C; &#x648;&#x641;&#x62A;&#x62D; &#x648;&#x627;&#x62A;&#x633;&#x627;&#x628; &#x627;&#x644;&#x645;&#x62D;&#x627;&#x62F;&#x62B;&#x629;&#x61F;</div>
+  <div class="row">
+    <button class="ghost" data-link="tel1">&#x627;&#x62A;&#x635;&#x627;&#x644; (&#x661;) &#x646;&#x62C;&#x62D;</button>
+    <button class="ghost" data-link="tel2">&#x627;&#x62A;&#x635;&#x627;&#x644; (&#x662;) &#x646;&#x62C;&#x62D;</button>
+    <button class="ghost" data-link="wa">&#x648;&#x627;&#x62A;&#x633;&#x627;&#x628; &#x646;&#x62C;&#x62D;</button>
+    <button class="ghost" data-link="map">&#x627;&#x644;&#x62E;&#x631;&#x627;&#x626;&#x637; &#x646;&#x62C;&#x62D;&#x62A;</button>
+    <button class="ghost" data-link="none">&#x644;&#x645; &#x64A;&#x639;&#x645;&#x644; &#x634;&#x64A;&#x621;</button>
+  </div>
+  <div class="log" id="l-link"></div>
+</div>
+
+<div class="card">
+  <h2>&#x665;) &#x62A;&#x635;&#x648;&#x64A;&#x631; &#x648;&#x631;&#x641;&#x639; &#x635;&#x648;&#x631;&#x629; <span class="st" id="s-photo">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
+  <label class="btn">&#x627;&#x644;&#x62A;&#x642;&#x627;&#x637; &#x635;&#x648;&#x631;&#x629;<input id="photo" type="file" accept="image/*" capture="environment" hidden></label>
+  <div class="log" id="l-photo"></div>
+</div>
+
+<div class="card">
+  <h2>&#x666;) &#x633;&#x631;&#x639;&#x629; &#x627;&#x644;&#x627;&#x62A;&#x635;&#x627;&#x644; &#x628;&#x627;&#x644;&#x62E;&#x627;&#x62F;&#x645; <span class="st" id="s-rt">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
+  <button id="rt">&#x642;&#x64A;&#x627;&#x633; &#x627;&#x644;&#x633;&#x631;&#x639;&#x629;</button>
+  <div class="log" id="l-rt"></div>
+</div>
+
+<div class="card">
+  <button id="send" class="alt">&#x625;&#x631;&#x633;&#x627;&#x644; &#x627;&#x644;&#x646;&#x62A;&#x627;&#x626;&#x62C;</button>
+  <div class="log" id="l-send"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script>
+// All JS strings are ASCII-escaped on paste; UI text lives in the markup above.
+var EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec'; // set when hosted outside Apps Script (static fallback)
+var HAS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
+var $ = function (id) { return document.getElementById(id); };
+var NAMES = {qr:'QR', gps:'GPS', ls:'LocalStorage', link:'tel / WhatsApp', photo:'Photo upload', rt:'Server round-trip'};
+var R = {qr:null, gps:null, ls:null, link:null, photo:null, rt:null};
+var D = {};
+
+function set(k, ok, msg) {
+  R[k] = ok; if (msg !== undefined) { D[k] = msg; $('l-' + k).textContent = msg; }
+  var s = $('s-' + k); s.className = 'st ' + (ok ? 'pass' : 'fail'); s.textContent = ok ? 'PASS' : 'FAIL';
+  renderSummary();
+}
+function renderSummary() {
+  var html = '';
+  for (var k in NAMES) html += '<li>' + (R[k] === true ? '&#9989; ' : R[k] === false ? '&#10060; ' : '&#9711; ') + NAMES[k] + '</li>';
+  $('summary').innerHTML = html;
+}
+function note(k, msg) { $('l-' + k).textContent = msg; D[k] = msg; }
+
+// device info
+var inFrame = (function () { try { return window.top !== window; } catch (e) { return true; } })();
+var fp = document.featurePolicy || document.permissionsPolicy;
+var pol = fp ? ('camera=' + fp.allowsFeature('camera') + ' geo=' + fp.allowsFeature('geolocation')) : 'policy=n/a';
+D.device = navigator.userAgent + ' | iframe=' + inFrame + ' | secure=' + window.isSecureContext + ' | ' + pol;
+$('dev').textContent = D.device;
+$('mode').textContent = HAS_GAS ? 'Apps Script' : 'Static';
+renderSummary();
+
+// test QR codes
+function drawQr(el, text) { var q = qrcode(0, 'M'); q.addData(text); q.make(); el.innerHTML = q.createSvgTag({cellSize:4, margin:2}) + '<div style="font:12px monospace;text-align:center">' + text + '</div>'; }
+try { drawQr($('q1'), 'SOL:1234-1/2'); drawQr($('q2'), 'SOL:1234-2/2'); } catch (e) {}
+
+// 1) QR scanning (continuous)
+var scanner = null, seen = {}, scans = 0, audio = null;
+function beep() {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    var o = audio.createOscillator(), g = audio.createGain();
+    o.frequency.value = 1100; g.gain.value = 0.2; o.connect(g); g.connect(audio.destination);
+    o.start(); o.stop(audio.currentTime + 0.12);
+  } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate(120);
+}
+$('qr-start').onclick = function () {
+  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch (e) {}
+  if (typeof Html5Qrcode === 'undefined') return set('qr', false, 'library did not load');
+  if (!scanner) scanner = new Html5Qrcode('reader', {verbose:false, experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
+  note('qr', 'starting camera...');
+  var t0 = Date.now();
+  scanner.start({facingMode:'environment'}, {fps:10, qrbox:{width:230, height:230}}, function (text) {
+    var now = Date.now();
+    if (seen[text] && now - seen[text] < 2500) return; // same code again within 2.5s = ignore
+    seen[text] = now; scans++; beep();
+    set('qr', true, 'scans: ' + scans + ' | last: ' + text + ' | vibrate=' + !!navigator.vibrate);
+  }, function () {}).then(function () {
+    if (!R.qr) note('qr', 'camera on in ' + (Date.now() - t0) + ' ms - point it at a QR code');
+  }).catch(function (e) { set('qr', false, 'camera error: ' + (e && (e.name || e.message) || e)); });
+};
+$('qr-stop').onclick = function () { if (scanner && scanner.isScanning) scanner.stop(); };
+
+// 2) Geolocation
+$('gps').onclick = function () {
+  if (!navigator.geolocation) return set('gps', false, 'navigator.geolocation missing');
+  note('gps', 'locating...'); var t0 = Date.now();
+  navigator.geolocation.getCurrentPosition(function (p) {
+    var c = p.coords;
+    set('gps', true, c.latitude.toFixed(6) + ', ' + c.longitude.toFixed(6) + ' | accuracy ' + Math.round(c.accuracy) + ' m | ' + (Date.now() - t0) + ' ms');
+  }, function (e) { set('gps', false, 'error ' + e.code + ': ' + e.message); }, {enableHighAccuracy:true, timeout:20000, maximumAge:0});
+};
+
+// 3) localStorage persistence
+(function () {
+  try {
+    var n = (parseInt(localStorage.getItem('sol_spike_n'), 10) || 0) + 1;
+    var first = localStorage.getItem('sol_spike_first') || new Date().toISOString();
+    localStorage.setItem('sol_spike_n', n); localStorage.setItem('sol_spike_first', first);
+    var msg = 'opened ' + n + ' time(s), first: ' + first;
+    if (n >= 2) set('ls', true, msg); else note('ls', msg + ' - reload the page now');
+  } catch (e) { set('ls', false, 'localStorage error: ' + e.message); }
+})();
+$('ls-reload').onclick = function () { location.reload(); };
+
+// 4) tel / wa.me links (owner confirms by hand)
+var linkOk = {};
+Array.prototype.forEach.call(document.querySelectorAll('[data-link]'), function (b) {
+  b.onclick = function () {
+    var k = b.getAttribute('data-link');
+    if (k === 'none') { linkOk = {}; return set('link', false, 'owner: nothing worked'); }
+    linkOk[k] = true;
+    var keys = Object.keys(linkOk);
+    set('link', (linkOk.tel1 || linkOk.tel2) && linkOk.wa ? true : false, 'worked: ' + keys.join(', '));
+  };
+});
+
+// 5) Photo capture + upload
+$('photo').onchange = function () {
+  var f = this.files && this.files[0]; if (!f) return;
+  note('photo', 'resizing ' + Math.round(f.size / 1024) + ' KB...');
+  var img = new Image(), url = URL.createObjectURL(f);
+  img.onload = function () {
+    var max = 1280, s = Math.min(1, max / Math.max(img.width, img.height));
+    var c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+    var b64 = c.toDataURL('image/jpeg', 0.7).split(',')[1];
+    note('photo', 'uploading ' + Math.round(b64.length * 0.75 / 1024) + ' KB...');
+    if (!HAS_GAS) return set('photo', false, 'static mode: upload not wired yet');
+    var t0 = Date.now();
+    google.script.run.withSuccessHandler(function (r) {
+      set('photo', true, 'saved ' + Math.round(r.size / 1024) + ' KB in ' + (Date.now() - t0) + ' ms\n' + r.url);
+    }).withFailureHandler(function (e) { set('photo', false, 'upload error: ' + e.message); }).spikeSavePhoto(b64, 'spike-' + Date.now() + '.jpg');
+  };
+  img.onerror = function () { set('photo', false, 'could not read the image'); };
+  img.src = url;
+};
+
+// 6) Round trip
+function ping(cb) {
+  var t0 = Date.now();
+  if (HAS_GAS) return google.script.run.withSuccessHandler(function () { cb(null, Date.now() - t0); }).withFailureHandler(function (e) { cb(e); }).spikePing(t0);
+  fetch(EXEC + '?p=ping').then(function (r) { return r.json(); }).then(function () { cb(null, Date.now() - t0); }, cb);
+}
+$('rt').onclick = function () {
+  var times = [], n = 5; note('rt', 'measuring...');
+  (function next() {
+    ping(function (err, ms) {
+      if (err) return set('rt', false, 'error: ' + (err.message || err));
+      times.push(ms);
+      if (times.length < n) return next();
+      var avg = Math.round(times.reduce(function (a, b) { return a + b; }, 0) / n);
+      set('rt', true, 'avg ' + avg + ' ms | min ' + Math.min.apply(null, times) + ' | max ' + Math.max.apply(null, times) + ' | ' + times.join(', '));
+    });
+  })();
+};
+
+// Send results
+$('send').onclick = function () {
+  var payload = {results:R, details:D, mode:HAS_GAS ? 'gas' : 'static'};
+  note('send', 'sending...');
+  if (HAS_GAS) return google.script.run.withSuccessHandler(function () { note('send', 'sent - thank you'); })
+    .withFailureHandler(function (e) { note('send', 'error: ' + e.message); }).spikeReport(payload);
+  fetch(EXEC + '?p=report&d=' + encodeURIComponent(JSON.stringify(payload)))
+    .then(function () { note('send', 'sent - thank you'); }, function (e) { note('send', 'error: ' + e); });
+};
+</script>
+</body>
+</html>
