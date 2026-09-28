@@ -71,6 +71,15 @@
   .bagpick button { min-height:64px; font:inherit; font-size:20px; font-weight:800; border-radius:14px; border:2px solid var(--line); background:#fffdf8; }
   .bagpick button.on { background:var(--olive); color:var(--ivory); border-color:var(--olive); }
   .bagpick button[disabled] { opacity:.5; }
+  .acts { display:flex; gap:8px; margin-top:8px; }
+  .acts > * { flex:1; margin:4px 0; min-height:52px; font-size:17px; padding:10px 6px; }
+  .btn.wa { background:#1f7a4d; }
+  .reason { display:flex; gap:10px; align-items:flex-start; background:#fffdf8; border:2px solid var(--line); border-radius:14px; padding:12px; margin:8px 0; font-weight:700; }
+  .reason input { width:22px; height:22px; margin-top:3px; flex:none; }
+  .reason small { display:block; font-weight:600; color:var(--bad); font-size:14px; }
+  .reason.off { opacity:.6; }
+  .say { font-size:20px; line-height:1.8; font-weight:700; border:3px solid var(--terra); }
+  textarea.field { font:inherit; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -88,7 +97,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 'use strict';
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec';
 const PRINT_URL = EXEC + '?p=print';
 const $ = id => document.getElementById(id);
@@ -102,7 +111,9 @@ let S = store.get('sol_app', null);            // {token, user:{code,name,admin}
 let pick = store.get('sol_pick', null);        // current pickup session {orders:{id:{card,total,bags:[code],unv:[code]}}}
 let queue = store.get('sol_queue', []);        // offline queue [{qid, api, body, at, label}]
 let notes = store.get('sol_notes', []);        // results of queued sends, shown on home
-let scanner = null, audio = null, busy = false, lastText = '', lastAt = 0;
+let scanner = null, scanCb = null, audio = null, busy = false, lastText = '', lastAt = 0;
+let mine = store.get('sol_mine', null);        // last «طلباتي» answer (shown offline) {today, orders, amount, day}
+let lastPos = null;                            // latest GPS fix {lat,lng,acc,at}
 
 // ───────── server ─────────
 async function api(action, body, timeoutMs) {
@@ -136,10 +147,12 @@ async function flushQueue() {
       if (r.offline) break;
       if (r.auth === false) break;
       queue.shift(); saveQueue();
+      if (it.api === 'callLog' && r.ok) continue; // calls: no notice unless refused
       notes.unshift({at: Date.now(), label: it.label, r}); notes = notes.slice(0, 5); store.set('sol_notes', notes);
     }
   } finally { flushing = false; }
   if (current === 'home') showHome();
+  else if (current === 'mine') showMine();
 }
 window.addEventListener('online', () => { setNet(); flushQueue(); });
 window.addEventListener('offline', setNet);
@@ -181,7 +194,7 @@ function flash(kind, title, sub) {
 // ───────── screens ─────────
 let current = '';
 function view(name, html) {
-  if (current === 'pickup' && name !== 'pickup') stopCamera();
+  if (scanner) stopCamera();
   current = name; $('app').innerHTML = html; window.scrollTo(0, 0);
   $('who').innerHTML = S ? esc(S.user.name) + (S.user.admin ? '<span class="badge">مدير</span>' : '') : '';
 }
@@ -218,6 +231,7 @@ function logout(expired) {
 function noteHtml(n) {
   const r = n.r;
   if (!r.ok) return `<div class="banner">${esc(n.label)}: ${esc(r.error || 'تعذّر الإرسال')}</div>`;
+  if (!r.sum) return `<div class="banner okb">${esc(n.label)} — تم الإرسال${r.newAmount ? ' (المبلغ الجديد ' + money(r.newAmount) + ' جنيهًا)' : ''}</div>`;
   let h = `<div class="banner okb">${esc(n.label)} — تم الإرسال: استلمت ${r.sum.orders} طلبًا = ${r.sum.bags} طردًا، المطلوب تحصيله ${money(r.sum.amount)} جنيهًا</div>`;
   (r.rejected || []).forEach(x => { h += `<div class="banner">الطلب ${esc(x.order)}: ${esc(x.error)}</div>`; });
   return h;
@@ -238,16 +252,246 @@ function showHome() {
   if ($('clr')) $('clr').onclick = () => { notes = []; store.set('sol_notes', notes); showHome(); };
 }
 
+// ───────── «طلباتي» + delivery (Task 5) ─────────
+const VISIT_FEE = 65;
+const ACT_APIS = ['deliver', 'fail', 'postpone'];
+const FAIL_REASONS = [
+  ['noAnswer', 'العميل لا يرد'], ['phoneOff', 'الهاتف مغلق'], ['refused', 'رفض الاستلام دون سبب'],
+  ['badAddress', 'العنوان خاطئ'], ['noShow', 'العميل غير متواجد رغم تأكيد الموعد'], ['other', 'أخرى']];
+const waNum = p => { p = String(p || '').replace(/\D/g, ''); return p.startsWith('0') ? '2' + p : p; };
+const mapUrl = o => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([o.address, o.city].filter(Boolean).join('، '));
+const noShowSentence = amt => 'نعتذر إليكم، فقد أكّدتم موعد التسليم اليوم ولم نتمكّن من تسليم الطلب لعدم وجودكم في العنوان. ووفقًا لسياسة المتجر تُضاعَف رسوم الشحن في المحاولة القادمة، فيصبح المبلغ المطلوب عند التسليم ' + money(amt) + ' جنيهًا.';
+const dayStr = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const pendingOf = id => queue.find(it => ACT_APIS.includes(it.api) && it.body.order === id);
+const cardOf = id => mine && mine.orders.find(o => o.order === id);
+const warnBox = h => `<div class="banner" style="background:#fbeed6;color:var(--warn)">${h}</div>`;
+
+// GPS: every action asks for a fresh fix; failure never blocks (the server flags «الموقع غير متاح»)
+function getPos(ms) {
+  return new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    let done = false; const t = setTimeout(() => { if (!done) { done = true; res(null); } }, ms + 500);
+    navigator.geolocation.getCurrentPosition(p => {
+      if (done) return; done = true; clearTimeout(t);
+      lastPos = {lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), acc: Math.round(p.coords.accuracy), at: Date.now()};
+      res(lastPos);
+    }, () => { if (!done) { done = true; clearTimeout(t); res(null); } }, {enableHighAccuracy: true, timeout: ms, maximumAge: 30000});
+  });
+}
+const posBody = p => p ? {lat: p.lat, lng: p.lng, acc: p.acc} : {};
+
+// send now; if there is no connection keep it in the queue (same qid → the server writes it once)
+async function act(apiName, body, label) {
+  const item = {qid: qid(), api: apiName, body, at: Date.now(), label};
+  const r = await api(apiName, Object.assign({qid: item.qid}, body), 40000);
+  if (r.offline) { queue.push(item); saveQueue(); return {ok: true, queued: true}; }
+  return r;
+}
+
 async function showMine() {
-  view('mine', `<h1>طلباتي</h1><div id="mlist" class="muted">جارٍ التحميل…</div><button class="btn ghost" id="back">رجوع</button>`);
-  $('back').onclick = showHome;
+  renderMine(true);
+  getPos(8000); // warm up GPS (also asks for the permission early)
   const r = await api('myOrders');
   if (current !== 'mine') return;
-  if (!r.ok) { $('mlist').innerHTML = `<div class="err">${esc(r.error)}</div>`; return; }
-  $('mlist').innerHTML = !r.orders.length ? '<p>لا توجد طلبات معك الآن.</p>' :
-    `<div class="summary">معك ${r.orders.length} طلبًا، المطلوب تحصيله ${money(r.amount)} جنيهًا</div>` +
-    r.orders.map(o => `<div class="card"><div class="top"><span class="num">#${esc(o.order)}</span><span class="tag ok">${esc(o.status)}</span><span class="amt">${o.prepaid ? 'مدفوع مسبقًا' : money(o.amount) + ' ج'}</span></div>
-      <div>${esc(o.customer)}</div><div class="muted">${esc(o.city)}${o.area ? ' — ' + esc(o.area) : ''} · ${o.bags} طرود</div></div>`).join('');
+  if (r.ok) {
+    // calls still waiting in the queue are not in the server count yet
+    r.orders.forEach(o => { o.calls += queue.filter(it => it.api === 'callLog' && it.body.kind === 'call' && it.body.order === o.order).length; });
+    mine = r; store.set('sol_mine', mine);
+  }
+  renderMine(false, r.ok ? '' : (r.offline ? 'لا يوجد اتصال — تُعرض آخر قائمة محفوظة' : r.error));
+}
+
+function renderMine(loading, err) {
+  const my = S.user.name, list = mine ? mine.orders : [];
+  const due = list.filter(o => o.due), later = list.filter(o => !o.due);
+  const d = (mine && mine.day) || {visits: 0, fee: 0, collected: 0, delivered: 0};
+  view('mine', `<h1>طلباتي</h1>
+    ${err ? `<div class="banner">${esc(err)}</div>` : ''}
+    ${loading && !mine ? '<p class="muted">جارٍ التحميل…</p>' : ''}
+    ${mine ? `<div class="summary">معك ${list.filter(o => o.courier === my && !o.canceled).length} طلبًا، المطلوب تحصيله ${money(mine.amount)} جنيهًا
+      <br><small>اليوم: ${d.visits} زيارة · مستحقك ${money(d.fee)} جنيهًا · سلّمت ${d.delivered} · حصّلت ${money(d.collected)} جنيهًا</small></div>` : ''}
+    ${mine && !list.length ? '<p>لا توجد طلبات معك الآن.</p>' : ''}
+    ${due.map(mineCard).join('')}
+    ${later.length ? `<h2>مؤجلة لموعد لاحق (${later.length})</h2>` + later.map(mineCard).join('') : ''}
+    <button class="btn ghost" id="refresh">تحديث القائمة</button>
+    <button class="btn ghost" id="back">رجوع</button>`);
+  $('back').onclick = showHome;
+  $('refresh').onclick = showMine;
+  $('app').querySelectorAll('[data-call]').forEach(a => a.onclick = () => logCall(a.dataset.call));
+  $('app').querySelectorAll('[data-confirm]').forEach(b => b.onclick = () => confirmAppt(b.dataset.confirm, b));
+  $('app').querySelectorAll('[data-act]').forEach(b => b.onclick = () => { unlockAudio(); showDeliverScan(b.dataset.act); });
+}
+
+function mineCard(o) {
+  const pend = pendingOf(o.order), admin = S.user.admin;
+  return `<div class="card">
+    <div class="top"><span class="num">#${esc(o.order)}</span><span class="tag ${o.canceled ? 'miss' : 'ok'}">${esc(o.canceled ? 'ملغى' : o.status)}</span><span class="amt">${o.prepaid ? 'مدفوع مسبقًا' : money(o.amount) + ' ج'}</span></div>
+    ${admin && o.courier !== S.user.name ? `<div class="muted">المندوب: <b>${esc(o.courier)}</b></div>` : ''}
+    <div><b>${esc(o.customer)}</b></div>
+    <div><b>${esc(o.city)}${o.area ? ' — ' + esc(o.area) : ''}</b></div>
+    <div class="muted">${esc(o.address)}</div>
+    <div class="muted">${o.items.map(esc).join('، ')} · ${o.bags} طرود</div>
+    ${o.note ? `<div class="muted">ملاحظة العميل: ${esc(o.note)}</div>` : ''}
+    ${o.canceled ? '<div class="banner">هذا الطلب ملغى — لا تسلّمه وأعده إلى المخزن</div>' : ''}
+    ${o.reprint ? warnBox('تغيّر المبلغ المطلوب — المبلغ الصحيح هو المعروض هنا وليس المطبوع على البوليصة') : ''}
+    ${!o.due ? warnBox('مؤجل إلى ' + esc(o.postponedTo)) : o.postponedTo ? `<div class="muted">كان مؤجلًا إلى ${esc(o.postponedTo)}</div>` : ''}
+    <div class="acts">
+      ${o.phone ? `<a class="btn" href="tel:${esc(o.phone)}" data-call="${esc(o.order)}">اتصال</a><a class="btn wa" href="https://wa.me/${waNum(o.phone)}" target="_blank" rel="noopener">واتساب</a>` : ''}
+      <a class="btn dark" href="${mapUrl(o)}" target="_blank" rel="noopener">خرائط</a>
+    </div>
+    ${o.altPhone && o.altPhone !== o.phone ? `<a class="btn ghost" href="tel:${esc(o.altPhone)}" data-call="${esc(o.order)}">اتصال بالهاتف البديل ${esc(o.altPhone)}</a>` : ''}
+    <div class="muted">اتصالات اليوم: <b>${o.calls}</b>${admin ? ` (الإجمالي ${o.callsAll})` : ''} · ${o.confirmed ? '<b style="color:var(--ok)">الموعد مؤكَّد اليوم ✓</b>' : 'الموعد غير مؤكَّد اليوم'}</div>
+    ${pend ? warnBox(esc(pend.label) + ' — في انتظار الإرسال') : o.canceled ? '' : `<div class="acts">
+      <button class="btn ghost" data-confirm="${esc(o.order)}" ${o.confirmed ? 'disabled' : ''}>أكّد العميل الموعد</button>
+      <button class="btn terra" data-act="${esc(o.order)}">التسليم (امسح الطرد)</button></div>`}
+  </div>`;
+}
+
+// «اتصال»: logged BEFORE the dialer opens (queued in localStorage, so it survives the page going to background)
+function logCall(id) {
+  const body = Object.assign({order: id, kind: 'call'}, posBody(lastPos && Date.now() - lastPos.at < 300000 ? lastPos : null));
+  queue.push({qid: qid(), api: 'callLog', body, at: Date.now(), label: 'اتصال بالطلب ' + id}); saveQueue();
+  const c = cardOf(id); if (c) { c.calls++; store.set('sol_mine', mine); }
+  setTimeout(() => { flushQueue(); if (current === 'mine') renderMine(false); }, 400);
+}
+
+async function confirmAppt(id, b) {
+  if (!confirm('هل أكّد العميل موعد التسليم اليوم؟')) return;
+  b.disabled = true; b.textContent = 'جارٍ التسجيل…';
+  const p = await getPos(6000);
+  const r = await act('callLog', Object.assign({order: id, kind: 'confirm'}, posBody(p)), 'تأكيد موعد الطلب ' + id);
+  if (!r.ok) { b.disabled = false; b.textContent = 'أكّد العميل الموعد'; return flash('bad', r.error || 'تعذّر التسجيل'); }
+  const c = cardOf(id); if (c) { c.confirmed = true; store.set('sol_mine', mine); }
+  flash('ok', r.queued ? 'حُفظ التأكيد وسيُرسل عند عودة الاتصال' : 'سُجّل تأكيد الموعد ✓');
+  if (current === 'mine') renderMine(false);
+}
+
+// mandatory: scan a bag of THIS order before any delivery action
+function showDeliverScan(id) {
+  const o = cardOf(id); if (!o) return showMine();
+  view('dscan', `<h1>الطلب #${esc(id)}</h1>
+    <p><b>امسح رمز QR على أي طرد من طرود هذا الطلب</b> للمتابعة إلى التسليم.</p>
+    <div id="reader"></div><div class="err" id="camerr"></div>
+    ${S.user.admin ? '<button class="btn ghost" id="adm">اختيار الطرد يدويًا (للمدير)</button>' : ''}
+    <button class="btn ghost" id="back">رجوع</button>`);
+  $('back').onclick = () => renderMine(false);
+  if ($('adm')) $('adm').onclick = () => showActions(id, 'SOL:' + o.bagIds[0]);
+  startCamera(text => {
+    const m = String(text).match(/^SOL:(\d{1,10})-(\d{1,2})\/(\d{1,2})$/i);
+    if (!m) return flash('bad', 'هذا ليس رمز بوليصة سوليتا');
+    if (m[1] !== id) return flash('bad', 'هذا الطرد من طلب آخر (#' + m[1] + ')', 'امسح طردًا من الطلب #' + id);
+    if (+m[3] !== o.bags || +m[2] < 1 || +m[2] > o.bags) return flash('bad', 'هذه البوليصة قديمة ولا تطابق الطلب', 'تواصل مع الإدارة');
+    flash('ok', 'تم التحقق من الطرد ✓', `الطلب ${id} — الطرد ${+m[2]} من ${o.bags}`);
+    showActions(id, `SOL:${id}-${+m[2]}/${o.bags}`);
+  });
+}
+
+function showActions(id, bag) {
+  const o = cardOf(id);
+  view('actions', `<h1>الطلب #${esc(id)} — ${esc(o.customer)}</h1>
+    <div class="banner okb">تم مسح الطرد ${esc(bag.replace(/^SOL:\d+-/, ''))} ✓</div>
+    <div class="summary">المطلوب تحصيله: ${o.prepaid ? 'لا شيء (مدفوع مسبقًا)' : money(o.amount) + ' جنيهًا'}</div>
+    <button class="btn big" id="aDone">تم التسليم</button>
+    <button class="btn big terra" id="aFail">لم يتم التسليم</button>
+    <button class="btn big dark" id="aPost">مؤجل</button>
+    <button class="btn ghost" id="back">رجوع</button>`);
+  $('back').onclick = () => renderMine(false);
+  $('aDone').onclick = () => formDeliver(o, bag);
+  $('aFail').onclick = () => formFail(o, bag);
+  $('aPost').onclick = () => formPostpone(o, bag);
+}
+
+// common submit: GPS → send (or queue) → result
+async function submitAction(btn, apiName, body, label, onOk) {
+  btn.disabled = true; btn.textContent = 'جارٍ تحديد الموقع…';
+  const p = await getPos(10000);
+  btn.textContent = 'جارٍ الإرسال…';
+  const r = await act(apiName, Object.assign(body, posBody(p)), label);
+  if (!r.ok) { btn.disabled = false; btn.textContent = 'إعادة المحاولة'; return flash('bad', r.error || 'تعذّر التسجيل'); }
+  onOk(r, p);
+}
+function doneScreen(html) {
+  view('done', html + '<button class="btn big" id="dMine">رجوع إلى طلباتي</button>');
+  $('dMine').onclick = showMine;
+}
+const geoNote = p => p ? '' : warnBox('الموقع غير متاح — سُجّل الإجراء مع تنبيه للإدارة. فعّل خدمة الموقع للتطبيق.');
+const queuedNote = r => r.queued ? warnBox('لا يوجد اتصال الآن — حُفظ الإجراء وسيُرسل تلقائيًا عند عودة الاتصال.') : '';
+const TXT = 'style="text-align:right;direction:rtl;font-size:18px"';
+
+function formDeliver(o, bag) {
+  const expect = o.prepaid ? 0 : o.amount;
+  view('form', `<h1>تم التسليم — #${esc(o.order)}</h1>
+    <p>أكّد المبلغ الذي حصّلته فعلًا من العميل (بالجنيه):</p>
+    <input id="amt" class="field" inputmode="numeric" pattern="[0-9]*" value="${expect}">
+    <div id="whyBox" class="hidden"><p class="err">المبلغ يختلف عن المطلوب (${money(expect)} جنيهًا) — اكتب السبب:</p>
+      <textarea id="why" class="field" rows="3" ${TXT}></textarea></div>
+    <button class="btn big" id="ok">تأكيد التسليم وتحصيل ${money(expect)} جنيهًا</button>
+    <button class="btn ghost" id="back">رجوع</button>`);
+  $('amt').oninput = () => {
+    const v = $('amt').value.replace(/\D/g, ''), n = v === '' ? NaN : +v;
+    $('whyBox').classList.toggle('hidden', n === expect);
+    $('ok').textContent = isNaN(n) ? 'أدخل المبلغ' : 'تأكيد التسليم وتحصيل ' + money(n) + ' جنيهًا';
+  };
+  $('back').onclick = () => showActions(o.order, bag);
+  $('ok').onclick = () => {
+    const v = $('amt').value.replace(/\D/g, ''), n = +v, why = $('why').value.trim();
+    if (v === '') return flash('bad', 'أدخل المبلغ المحصَّل');
+    if (n !== expect && why.length < 3) return flash('bad', 'اكتب سبب اختلاف المبلغ');
+    submitAction($('ok'), 'deliver', {order: o.order, bag, amount: n, reason: n !== expect ? why : ''}, 'تسليم الطلب ' + o.order, (r, p) => {
+      flash('ok', 'تم التسليم ✓');
+      doneScreen(`<div class="summary">تم تسليم الطلب #${esc(o.order)}<br>المحصَّل ${money(n)} جنيهًا · مستحقك ${VISIT_FEE} جنيهًا</div>${queuedNote(r)}${geoNote(p)}`);
+    });
+  };
+}
+
+function formFail(o, bag) {
+  const rule = {noAnswer: o.calls >= 2 ? '' : `يلزم الاتصال بالعميل مرتين على الأقل اليوم (اتصلت ${o.calls})`,
+    noShow: o.confirmed ? '' : 'يلزم تسجيل «أكّد العميل الموعد» اليوم أولًا'};
+  const fee = o.fee, newAmt = o.amount + fee;
+  view('form', `<h1>لم يتم التسليم — #${esc(o.order)}</h1><p>اختر السبب:</p>
+    ${FAIL_REASONS.map(([k, t]) => `<label class="reason ${rule[k] ? 'off' : ''}"><input type="radio" name="rs" value="${k}" ${rule[k] ? 'disabled' : ''}> <span>${t}${rule[k] ? `<small>${rule[k]}</small>` : ''}</span></label>`).join('')}
+    <div id="rsInfo"></div>
+    <textarea id="note" class="field" rows="2" placeholder="ملاحظة (إلزامية عند اختيار «أخرى»)" ${TXT}></textarea>
+    <button class="btn big terra" id="ok">تسجيل عدم التسليم</button>
+    <button class="btn ghost" id="back">رجوع</button>`);
+  $('app').querySelectorAll('input[name=rs]').forEach(i => i.onchange = () => {
+    $('rsInfo').innerHTML = i.value === 'noShow' ? `<div class="banner">ستُضاف ${money(fee)} جنيهًا رسوم شحن، فيصبح المطلوب في المحاولة القادمة ${money(newAmt)} جنيهًا.</div>`
+      : i.value === 'refused' ? '<div class="banner">سيُضاف رقم العميل إلى القائمة السوداء تلقائيًا.</div>' : '';
+  });
+  $('back').onclick = () => showActions(o.order, bag);
+  $('ok').onclick = () => {
+    const sel = $('app').querySelector('input[name=rs]:checked'), note = $('note').value.trim();
+    if (!sel) return flash('bad', 'اختر سبب عدم التسليم');
+    if (sel.value === 'other' && note.length < 3) return flash('bad', 'اكتب السبب في الملاحظة');
+    const k = sel.value, label = FAIL_REASONS.find(x => x[0] === k)[1];
+    submitAction($('ok'), 'fail', {order: o.order, bag, reason: k, note}, 'لم يتم تسليم الطلب ' + o.order + ' (' + label + ')', (r, p) => {
+      flash('info', 'سُجّل عدم التسليم');
+      const sentence = k === 'noShow' && !o.prepaid ? (r.sentence || noShowSentence(newAmt)) : '';
+      doneScreen(`<div class="summary">الطلب #${esc(o.order)}: لم يتم التسليم<br><small>${esc(label)} · مستحقك ${VISIT_FEE} جنيهًا</small></div>
+        ${sentence ? `<h2>قل للعميل:</h2><div class="card say">${esc(sentence)}</div>` : ''}
+        ${k === 'refused' ? '<div class="banner">أُضيف رقم العميل إلى القائمة السوداء.</div>' : ''}${queuedNote(r)}${geoNote(p)}`);
+    });
+  };
+}
+
+function formPostpone(o, bag) {
+  const t = new Date(), min = dayStr(new Date(t.getTime() + 864e5)), max = dayStr(new Date(t.getTime() + 30 * 864e5));
+  view('form', `<h1>مؤجل — #${esc(o.order)}</h1>
+    <p>اختر تاريخ التسليم الجديد (سيظهر الطلب في قائمتك في ذلك اليوم):</p>
+    <input id="dt" class="field" type="date" min="${min}" max="${max}" value="${min}">
+    <label class="reason"><input type="checkbox" id="vis"> <span>ذهبتُ إلى العميل في العنوان (زيارة فعلية)<small>تُحتسب الزيارة ${VISIT_FEE} جنيهًا</small></span></label>
+    <textarea id="note" class="field" rows="2" placeholder="ملاحظة (اختيارية)" ${TXT}></textarea>
+    <button class="btn big dark" id="ok">تأكيد التأجيل</button>
+    <button class="btn ghost" id="back">رجوع</button>`);
+  $('back').onclick = () => showActions(o.order, bag);
+  $('ok').onclick = () => {
+    const d = $('dt').value, vis = $('vis').checked;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d < min || d > max) return flash('bad', 'اختر تاريخًا بين الغد وثلاثين يومًا');
+    submitAction($('ok'), 'postpone', {order: o.order, bag, date: d, visited: vis, note: $('note').value.trim()}, 'تأجيل الطلب ' + o.order + ' إلى ' + d, (r, p) => {
+      flash('ok', 'تم التأجيل إلى ' + d);
+      doneScreen(`<div class="summary">الطلب #${esc(o.order)} مؤجل إلى ${esc(d)}${vis ? '<br><small>مستحقك ' + VISIT_FEE + ' جنيهًا</small>' : ''}</div>${queuedNote(r)}${geoNote(p)}`);
+    });
+  };
 }
 
 // ───────── pickup ─────────
@@ -277,7 +521,7 @@ function showPickup() {
   $('pDone').onclick = showSummary;
   $('pBack').onclick = showHome;
   renderPick();
-  startCamera();
+  startCamera(handleCode);
 }
 
 function renderPick() {
@@ -302,7 +546,8 @@ function renderPick() {
   });
 }
 
-function startCamera() {
+function startCamera(cb) {
+  scanCb = cb;
   if (typeof Html5Qrcode === 'undefined') { $('camerr').textContent = 'تعذّر تحميل قارئ الرموز — استخدم إدخال رقم الطلب يدويًا'; return; }
   try {
     scanner = new Html5Qrcode('reader', {verbose: false, formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], experimentalFeatures: {useBarCodeDetectorIfSupported: true}});
@@ -321,7 +566,7 @@ function onScan(text) {
   if (busy) return;
   if (text === lastText && now - lastAt < 2500) return; // the camera keeps reading the same label
   lastText = text; lastAt = now;
-  handleCode(text);
+  (scanCb || handleCode)(text);
 }
 
 async function handleCode(text) {
