@@ -1,265 +1,449 @@
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
-<base target="_top">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Solita &#x2014; &#x627;&#x62E;&#x62A;&#x628;&#x627;&#x631; &#x627;&#x644;&#x645;&#x648;&#x628;&#x627;&#x64A;&#x644;</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1C1C1A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="سوليتا">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>سوليتا — المندوب</title>
 <style>
-  :root { --ink:#1C1C1A; --ivory:#F5F1E8; --olive:#4A5140; --sand:#B7AA96; --terra:#A65F45; --ok:#3F7D4E; --bad:#B03A2E; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--ivory); color:var(--ink); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif; padding:12px 16px 40px; }
-  h1 { font-size:20px; margin:4px 0 2px; }
-  .sub { color:#6b665c; font-size:13px; margin-bottom:12px; }
-  .card { background:#fffdf8; border:1px solid var(--sand); border-radius:12px; padding:12px; margin:12px 0; }
-  .card h2 { font-size:17px; margin:0 0 8px; display:flex; justify-content:space-between; gap:8px; align-items:center; }
-  .st { font-size:13px; padding:2px 10px; border-radius:999px; background:#e7e1d4; white-space:nowrap; }
-  .st.pass { background:var(--ok); color:#fff; } .st.fail { background:var(--bad); color:#fff; }
-  button, .btn { display:inline-block; font:inherit; font-size:15px; border:0; border-radius:10px; padding:10px 14px; margin:4px 0 4px 6px; background:var(--olive); color:var(--ivory); text-decoration:none; cursor:pointer; }
-  button.alt, .btn.alt { background:var(--terra); } button.ghost { background:#e7e1d4; color:var(--ink); }
-  .log { font-size:13px; color:#4d4a42; word-break:break-all; margin-top:6px; white-space:pre-wrap; }
-  #reader { width:100%; max-width:360px; margin-top:8px; }
-  #summary li { margin:3px 0; }
-  .qr { background:#fff; display:inline-block; padding:8px; border-radius:8px; }
-  .row { display:flex; flex-wrap:wrap; align-items:center; }
-  small { color:#6b665c; }
+  :root { --dark:#1C1C1A; --olive:#4A5140; --ivory:#F5F1E8; --terra:#A65F45; --line:#CFC5B3; --muted:#6B665C; --ok:#2E7D32; --warn:#B7791F; --bad:#B3261E; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; background:var(--ivory); color:var(--dark); font:17px/1.5 -apple-system,"SF Arabic","Segoe UI",Tahoma,"Noto Sans Arabic",sans-serif; }
+  body { min-height:100vh; padding-bottom:env(safe-area-inset-bottom); }
+  header { background:var(--dark); color:var(--ivory); padding:calc(10px + env(safe-area-inset-top)) 16px 10px; display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:5; }
+  header .brand { font-weight:800; font-size:20px; letter-spacing:.5px; }
+  header .who { margin-inline-start:auto; font-size:14px; text-align:left; }
+  header .badge { background:var(--terra); color:#fff; border-radius:6px; padding:1px 7px; font-size:12px; margin-inline-start:6px; }
+  main { padding:16px; max-width:560px; margin:0 auto; }
+  h1 { font-size:22px; margin:6px 0 14px; }
+  h2 { font-size:18px; margin:18px 0 8px; }
+  .btn { display:block; width:100%; min-height:56px; border:0; border-radius:14px; font:inherit; font-weight:700; font-size:19px; background:var(--olive); color:var(--ivory); padding:12px 16px; margin:10px 0; cursor:pointer; text-align:center; text-decoration:none; }
+  .btn:active { transform:scale(.98); opacity:.9; }
+  .btn.big { min-height:84px; font-size:22px; }
+  .btn.terra { background:var(--terra); }
+  .btn.dark { background:var(--dark); }
+  .btn.ghost { background:transparent; color:var(--dark); border:2px solid var(--line); }
+  .btn[disabled] { opacity:.45; }
+  .row { display:flex; gap:10px; }
+  .row > * { flex:1; }
+  input.field { width:100%; min-height:58px; font:inherit; font-size:22px; padding:10px 14px; border:2px solid var(--line); border-radius:14px; background:#fffdf8; text-align:center; direction:ltr; }
+  input.field:focus { outline:none; border-color:var(--olive); }
+  .card { background:#fffdf8; border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin:10px 0; }
+  .card .top { display:flex; align-items:center; gap:8px; }
+  .card .num { font-weight:800; font-size:20px; }
+  .card .amt { margin-inline-start:auto; font-weight:800; }
+  .muted { color:var(--muted); font-size:15px; }
+  .err { color:var(--bad); font-weight:700; min-height:1.5em; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip { border-radius:10px; padding:6px 12px; font-weight:700; background:#e9e3d6; color:var(--muted); font-size:15px; }
+  .chip.on { background:var(--olive); color:var(--ivory); }
+  .chip.unv { background:var(--warn); color:#fff; }
+  .tag { font-size:13px; font-weight:700; border-radius:6px; padding:1px 8px; }
+  .tag.ok { background:#dfeee0; color:var(--ok); }
+  .tag.miss { background:#fbe3e1; color:var(--bad); }
+  .tag.unv { background:#fbeed6; color:var(--warn); }
+  .x { border:0; background:transparent; font-size:22px; color:var(--muted); min-width:44px; min-height:44px; cursor:pointer; }
+  #reader { width:100%; border-radius:14px; overflow:hidden; background:#000; min-height:260px; }
+  #reader video { border-radius:14px; }
+  .sticky { position:sticky; bottom:0; background:linear-gradient(transparent, var(--ivory) 30%); padding:14px 0 calc(8px + env(safe-area-inset-bottom)); }
+  .qbar { background:var(--warn); color:#fff; text-align:center; padding:8px; font-weight:700; }
+  .banner { background:#fbe3e1; color:var(--bad); border-radius:12px; padding:10px 12px; font-weight:700; margin:10px 0; }
+  .banner.okb { background:#dfeee0; color:var(--ok); }
+  .summary { font-size:20px; font-weight:800; line-height:1.7; background:var(--olive); color:var(--ivory); border-radius:14px; padding:16px; text-align:center; }
+  footer { text-align:center; color:var(--muted); font-size:13px; padding:18px 0 26px; }
+  /* full-screen flash (iPhone has no vibration) */
+  #flash { position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center; flex-direction:column; padding:24px; text-align:center; color:#fff; font-size:28px; font-weight:800; pointer-events:none; }
+  #flash.show { display:flex; animation:pulse .25s ease-out 2 alternate; }
+  #flash.ok { background:rgba(46,125,50,.93); } #flash.info { background:rgba(183,121,31,.95); } #flash.bad { background:rgba(179,38,30,.97); pointer-events:auto; }
+  #flash small { font-size:19px; font-weight:600; margin-top:10px; }
+  #flash .btn { max-width:320px; background:#fff; color:var(--bad); margin-top:24px; }
+  @keyframes pulse { from { opacity:.55 } to { opacity:1 } }
+  .modal { position:fixed; inset:0; z-index:40; background:rgba(28,28,26,.6); display:flex; align-items:flex-end; }
+  .modal .sheet { background:var(--ivory); width:100%; max-width:560px; margin:0 auto; border-radius:18px 18px 0 0; padding:18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  .bagpick { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:12px 0; }
+  .bagpick button { min-height:64px; font:inherit; font-size:20px; font-weight:800; border-radius:14px; border:2px solid var(--line); background:#fffdf8; }
+  .bagpick button.on { background:var(--olive); color:var(--ivory); border-color:var(--olive); }
+  .bagpick button[disabled] { opacity:.5; }
+  .hidden { display:none !important; }
 </style>
 </head>
 <body>
-<h1>Solita &#x2014; &#x627;&#x62E;&#x62A;&#x628;&#x627;&#x631; &#x627;&#x644;&#x645;&#x648;&#x628;&#x627;&#x64A;&#x644;</h1>
-<div class="sub">&#x646;&#x641;&#x651;&#x630; &#x627;&#x644;&#x627;&#x62E;&#x62A;&#x628;&#x627;&#x631;&#x627;&#x62A; &#x628;&#x627;&#x644;&#x62A;&#x631;&#x62A;&#x64A;&#x628;&#x60C; &#x62B;&#x645; &#x627;&#x636;&#x63A;&#x637; &#xAB;&#x625;&#x631;&#x633;&#x627;&#x644; &#x627;&#x644;&#x646;&#x62A;&#x627;&#x626;&#x62C;&#xBB; &#x641;&#x64A; &#x627;&#x644;&#x623;&#x633;&#x641;&#x644;.</div>
-
-<div class="card">
-  <h2>&#x627;&#x644;&#x646;&#x62A;&#x64A;&#x62C;&#x629; <span id="mode" class="st"></span></h2>
-  <ul id="summary"></ul>
-  <div class="log" id="dev"></div>
-</div>
-
-<div class="card">
-  <h2>&#x661;) &#x645;&#x633;&#x62D; &#x627;&#x644;&#x643;&#x648;&#x62F; (QR) &#x628;&#x627;&#x644;&#x643;&#x627;&#x645;&#x64A;&#x631;&#x627; <span class="st" id="s-qr">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
-  <div class="row">
-    <button id="qr-start">&#x62A;&#x634;&#x63A;&#x64A;&#x644; &#x627;&#x644;&#x643;&#x627;&#x645;&#x64A;&#x631;&#x627;</button>
-    <button id="qr-stop" class="ghost">&#x625;&#x64A;&#x642;&#x627;&#x641;</button>
-  </div>
-  <div id="reader"></div>
-  <div class="log" id="l-qr"></div>
-  <details style="margin-top:8px"><summary>&#x643;&#x648;&#x62F; &#x62A;&#x62C;&#x631;&#x64A;&#x628;&#x64A; &#x644;&#x644;&#x645;&#x633;&#x62D; (&#x627;&#x641;&#x62A;&#x62D; &#x647;&#x630;&#x647; &#x627;&#x644;&#x635;&#x641;&#x62D;&#x629; &#x639;&#x644;&#x649; &#x62C;&#x647;&#x627;&#x632; &#x622;&#x62E;&#x631; &#x648;&#x627;&#x645;&#x633;&#x62D;&#x647;)</summary>
-    <div class="row" style="gap:8px;margin-top:8px"><div class="qr" id="q1"></div><div class="qr" id="q2"></div></div>
-  </details>
-</div>
-
-<div class="card">
-  <h2>&#x662;) &#x627;&#x644;&#x645;&#x648;&#x642;&#x639; (GPS) <span class="st" id="s-gps">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
-  <button id="gps">&#x62A;&#x62D;&#x62F;&#x64A;&#x62F; &#x645;&#x648;&#x642;&#x639;&#x64A;</button>
-  <div class="log" id="l-gps"></div>
-</div>
-
-<div class="card">
-  <h2>&#x663;) &#x627;&#x644;&#x62D;&#x641;&#x638; &#x639;&#x644;&#x649; &#x627;&#x644;&#x62C;&#x647;&#x627;&#x632; <span class="st" id="s-ls">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
-  <div>&#x623;&#x639;&#x62F; &#x62A;&#x62D;&#x645;&#x64A;&#x644; &#x627;&#x644;&#x635;&#x641;&#x62D;&#x629; &#x645;&#x646; &#x627;&#x644;&#x645;&#x62A;&#x635;&#x641;&#x62D; (&#x623;&#x648; &#x623;&#x63A;&#x644;&#x642;&#x647;&#x627; &#x648;&#x627;&#x641;&#x62A;&#x62D;&#x647;&#x627; &#x645;&#x631;&#x629; &#x623;&#x62E;&#x631;&#x649;)&#x60C; &#x648;&#x64A;&#x62C;&#x628; &#x623;&#x646; &#x64A;&#x632;&#x64A;&#x62F; &#x627;&#x644;&#x639;&#x62F;&#x62F;.</div>
-  <button id="ls-reload" class="ghost">&#x625;&#x639;&#x627;&#x62F;&#x629; &#x62A;&#x62D;&#x645;&#x64A;&#x644; &#x627;&#x644;&#x635;&#x641;&#x62D;&#x629;</button>
-  <div class="log" id="l-ls"></div>
-</div>
-
-<div class="card">
-  <h2>&#x664;) &#x627;&#x644;&#x627;&#x62A;&#x635;&#x627;&#x644; &#x648;&#x648;&#x627;&#x62A;&#x633;&#x627;&#x628; <span class="st" id="s-link">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
-  <div class="row">
-    <a class="btn" id="tel1" href="tel:01122734281" target="_top">&#x627;&#x62A;&#x635;&#x627;&#x644; (&#x661;)</a>
-    <a class="btn" id="tel2" href="tel:01122734281" target="_blank">&#x627;&#x62A;&#x635;&#x627;&#x644; (&#x662;)</a>
-    <a class="btn alt" id="wa1" href="https://wa.me/201122734281?text=%D8%A7%D8%AE%D8%AA%D8%A8%D8%A7%D8%B1" target="_blank">&#x648;&#x627;&#x62A;&#x633;&#x627;&#x628;</a>
-    <a class="btn ghost" id="map1" href="https://www.google.com/maps/search/?api=1&query=%D9%85%D8%AF%D9%8A%D9%86%D8%A9%20%D9%86%D8%B5%D8%B1%20%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9" target="_blank">&#x62E;&#x631;&#x627;&#x626;&#x637;</a>
-  </div>
-  <div style="margin-top:6px">&#x647;&#x644; &#x641;&#x62A;&#x62D; &#x627;&#x644;&#x627;&#x62A;&#x635;&#x627;&#x644; &#x634;&#x627;&#x634;&#x629; &#x627;&#x644;&#x627;&#x62A;&#x635;&#x627;&#x644;&#x60C; &#x648;&#x641;&#x62A;&#x62D; &#x648;&#x627;&#x62A;&#x633;&#x627;&#x628; &#x627;&#x644;&#x645;&#x62D;&#x627;&#x62F;&#x62B;&#x629;&#x61F;</div>
-  <div class="row">
-    <button class="ghost" data-link="tel1">&#x627;&#x62A;&#x635;&#x627;&#x644; (&#x661;) &#x646;&#x62C;&#x62D;</button>
-    <button class="ghost" data-link="tel2">&#x627;&#x62A;&#x635;&#x627;&#x644; (&#x662;) &#x646;&#x62C;&#x62D;</button>
-    <button class="ghost" data-link="wa">&#x648;&#x627;&#x62A;&#x633;&#x627;&#x628; &#x646;&#x62C;&#x62D;</button>
-    <button class="ghost" data-link="map">&#x627;&#x644;&#x62E;&#x631;&#x627;&#x626;&#x637; &#x646;&#x62C;&#x62D;&#x62A;</button>
-    <button class="ghost" data-link="none">&#x644;&#x645; &#x64A;&#x639;&#x645;&#x644; &#x634;&#x64A;&#x621;</button>
-  </div>
-  <div class="log" id="l-link"></div>
-</div>
-
-<div class="card">
-  <h2>&#x665;) &#x62A;&#x635;&#x648;&#x64A;&#x631; &#x648;&#x631;&#x641;&#x639; &#x635;&#x648;&#x631;&#x629; <span class="st" id="s-photo">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
-  <label class="btn">&#x627;&#x644;&#x62A;&#x642;&#x627;&#x637; &#x635;&#x648;&#x631;&#x629;<input id="photo" type="file" accept="image/*" capture="environment" hidden></label>
-  <div class="log" id="l-photo"></div>
-</div>
-
-<div class="card">
-  <h2>&#x666;) &#x633;&#x631;&#x639;&#x629; &#x627;&#x644;&#x627;&#x62A;&#x635;&#x627;&#x644; &#x628;&#x627;&#x644;&#x62E;&#x627;&#x62F;&#x645; <span class="st" id="s-rt">&#x644;&#x645; &#x64A;&#x64F;&#x62E;&#x62A;&#x628;&#x631;</span></h2>
-  <button id="rt">&#x642;&#x64A;&#x627;&#x633; &#x627;&#x644;&#x633;&#x631;&#x639;&#x629;</button>
-  <div class="log" id="l-rt"></div>
-</div>
-
-<div class="card">
-  <button id="send" class="alt">&#x625;&#x631;&#x633;&#x627;&#x644; &#x627;&#x644;&#x646;&#x62A;&#x627;&#x626;&#x62C;</button>
-  <div class="log" id="l-send"></div>
-</div>
+<header>
+  <span class="brand">SOLITA · سوليتا</span>
+  <span class="who" id="who"></span>
+</header>
+<div id="qbar" class="qbar hidden"></div>
+<main id="app"></main>
+<footer>الإصدار <b id="ver"></b> · <span id="net"></span></footer>
+<div id="flash"></div>
+<div id="modal" class="modal hidden"><div class="sheet" id="sheet"></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
-// All JS strings are ASCII-escaped on paste; UI text lives in the markup above.
-var EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec'; // set when hosted outside Apps Script (static fallback)
-var HAS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
-var $ = function (id) { return document.getElementById(id); };
-var NAMES = {qr:'QR', gps:'GPS', ls:'LocalStorage', link:'tel / WhatsApp', photo:'Photo upload', rt:'Server round-trip'};
-var R = {qr:null, gps:null, ls:null, link:null, photo:null, rt:null};
-var D = {};
+'use strict';
+const VERSION = '1.0.0';
+const EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec';
+const PRINT_URL = EXEC + '?p=print';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => Number(n || 0).toLocaleString('en-US');
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+let S = store.get('sol_app', null);            // {token, user:{code,name,admin}}
+let pick = store.get('sol_pick', null);        // current pickup session {orders:{id:{card,total,bags:[code],unv:[code]}}}
+let queue = store.get('sol_queue', []);        // offline queue [{qid, api, body, at, label}]
+let notes = store.get('sol_notes', []);        // results of queued sends, shown on home
+let scanner = null, audio = null, busy = false, lastText = '', lastAt = 0;
 
-function save() { try { localStorage.setItem('sol_spike_state', JSON.stringify({R:R, D:D})); } catch (e) {} }
-function set(k, ok, msg) {
-  R[k] = ok; if (msg !== undefined) { D[k] = msg; $('l-' + k).textContent = msg; }
-  var s = $('s-' + k); s.className = 'st ' + (ok ? 'pass' : 'fail'); s.textContent = ok ? 'PASS' : 'FAIL';
-  renderSummary(); save();
+// ───────── server ─────────
+async function api(action, body, timeoutMs) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), timeoutMs || 25000);
+  try {
+    const r = await fetch(EXEC, {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: JSON.stringify(Object.assign({api: action, token: S && S.token}, body || {})), signal: ctl.signal});
+    const j = await r.json();
+    if (j && j.auth === false && action !== 'login') { logout(true); }
+    return j;
+  } catch (e) {
+    return {ok: false, offline: true, error: 'لا يوجد اتصال بالإنترنت'};
+  } finally { clearTimeout(t); }
 }
-// restore results from before a reload (so nothing is lost)
-try {
-  var old = JSON.parse(localStorage.getItem('sol_spike_state') || 'null');
-  if (old) setTimeout(function () {
-    for (var k in NAMES) {
-      if (k === 'ls') continue;
-      if (old.R[k] === true || old.R[k] === false) set(k, old.R[k], old.D[k] || '');
-      else if (old.D[k]) note(k, old.D[k]);
+const qid = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+
+// ───────── offline queue ─────────
+function saveQueue() { store.set('sol_queue', queue); renderQbar(); }
+function renderQbar() {
+  const b = $('qbar');
+  b.textContent = 'في انتظار الإرسال (' + queue.length + ')';
+  b.classList.toggle('hidden', !queue.length);
+}
+let flushing = false;
+async function flushQueue() {
+  if (flushing || !queue.length || !S) return;
+  flushing = true;
+  try {
+    while (queue.length) {
+      const it = queue[0];
+      const r = await api(it.api, Object.assign({qid: it.qid}, it.body));
+      if (r.offline) break;
+      if (r.auth === false) break;
+      queue.shift(); saveQueue();
+      notes.unshift({at: Date.now(), label: it.label, r}); notes = notes.slice(0, 5); store.set('sol_notes', notes);
     }
-  }, 0);
-} catch (e) {}
-function renderSummary() {
-  var html = '';
-  for (var k in NAMES) html += '<li>' + (R[k] === true ? '&#9989; ' : R[k] === false ? '&#10060; ' : '&#9711; ') + NAMES[k] + '</li>';
-  $('summary').innerHTML = html;
+  } finally { flushing = false; }
+  if (current === 'home') showHome();
 }
-function note(k, msg) { $('l-' + k).textContent = msg; D[k] = msg; save(); }
+window.addEventListener('online', () => { setNet(); flushQueue(); });
+window.addEventListener('offline', setNet);
+setInterval(flushQueue, 30000);
+function setNet() { $('net').textContent = navigator.onLine ? 'متصل' : 'غير متصل'; }
 
-// device info
-var inFrame = (function () { try { return window.top !== window; } catch (e) { return true; } })();
-var fp = document.featurePolicy || document.permissionsPolicy;
-var pol = fp ? ('camera=' + fp.allowsFeature('camera') + ' geo=' + fp.allowsFeature('geolocation')) : 'policy=n/a';
-D.device = navigator.userAgent + ' | iframe=' + inFrame + ' | secure=' + window.isSecureContext + ' | ' + pol;
-$('dev').textContent = D.device;
-$('mode').textContent = HAS_GAS ? 'Apps Script' : 'Static';
-renderSummary();
-
-// test QR codes
-function drawQr(el, text) { var q = qrcode(0, 'M'); q.addData(text); q.make(); el.innerHTML = q.createSvgTag({cellSize:4, margin:2}) + '<div style="font:12px monospace;text-align:center">' + text + '</div>'; }
-try { drawQr($('q1'), 'SOL:1234-1/2'); drawQr($('q2'), 'SOL:1234-2/2'); } catch (e) {}
-
-// 1) QR scanning (continuous)
-var scanner = null, seen = {}, scans = 0, audio = null;
-function beep() {
-  try {
-    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-    var o = audio.createOscillator(), g = audio.createGain();
-    o.frequency.value = 1100; g.gain.value = 0.2; o.connect(g); g.connect(audio.destination);
-    o.start(); o.stop(audio.currentTime + 0.12);
-  } catch (e) {}
-  if (navigator.vibrate) navigator.vibrate(120);
+// ───────── feedback: sound + flash (+ vibration where supported) ─────────
+function unlockAudio() {
+  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); if (audio.state !== 'running') audio.resume(); } catch (e) {}
 }
-$('qr-start').onclick = function () {
-  try { startQr(); } catch (e) { set('qr', false, 'exception: ' + (e && e.message || e)); }
+function tone(seq) {
+  if (!audio) return;
+  let t = audio.currentTime + 0.01;
+  seq.forEach(([f, d, type]) => {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = type || 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t + d + 0.02);
+    t += d + 0.06;
+  });
+}
+const SND = {
+  ok: () => tone([[1320, 0.12]]),
+  info: () => tone([[660, 0.12], [660, 0.12]]),
+  bad: () => tone([[200, 0.28, 'square'], [160, 0.28, 'square'], [200, 0.4, 'square']])
 };
-function startQr() {
-  note('qr', 'button tapped');
-  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch (e) {}
-  if (typeof Html5Qrcode === 'undefined') return set('qr', false, 'library did not load');
-  if (!scanner) scanner = new Html5Qrcode('reader', {verbose:false, experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
-  note('qr', 'starting camera...');
-  var t0 = Date.now();
-  scanner.start({facingMode:'environment'}, {fps:10, qrbox:{width:230, height:230}}, function (text) {
-    var now = Date.now();
-    if (seen[text] && now - seen[text] < 2500) return; // same code again within 2.5s = ignore
-    seen[text] = now; scans++; beep();
-    set('qr', true, 'scans: ' + scans + ' | last: ' + text + ' | vibrate=' + !!navigator.vibrate);
-  }, function () {}).then(function () {
-    if (!R.qr) note('qr', 'camera on in ' + (Date.now() - t0) + ' ms - point it at a QR code');
-  }).catch(function (e) { set('qr', false, 'camera error: ' + (e && (e.name || e.message) || e)); });
+let flashTimer = null;
+function flash(kind, title, sub) {
+  const f = $('flash');
+  clearTimeout(flashTimer);
+  f.className = kind + ' show';
+  f.innerHTML = '<div>' + esc(title) + '</div>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + (kind === 'bad' ? '<button class="btn" id="flashOk">حسنًا</button>' : '');
+  (SND[kind] || SND.info)();
+  try { navigator.vibrate && navigator.vibrate(kind === 'bad' ? [300, 120, 300, 120, 300] : kind === 'ok' ? 80 : [80, 80, 80]); } catch (e) {}
+  if (kind === 'bad') { busy = true; $('flashOk').onclick = () => { f.className = ''; busy = false; lastText = ''; }; }
+  else flashTimer = setTimeout(() => { f.className = ''; }, kind === 'ok' ? 900 : 1600);
 }
-$('qr-stop').onclick = function () { if (scanner && scanner.isScanning) scanner.stop(); };
 
-// 2) Geolocation
-$('gps').onclick = function () {
-  if (!navigator.geolocation) return set('gps', false, 'navigator.geolocation missing');
-  note('gps', 'locating...'); var t0 = Date.now();
-  navigator.geolocation.getCurrentPosition(function (p) {
-    var c = p.coords;
-    set('gps', true, c.latitude.toFixed(6) + ', ' + c.longitude.toFixed(6) + ' | accuracy ' + Math.round(c.accuracy) + ' m | ' + (Date.now() - t0) + ' ms');
-  }, function (e) { set('gps', false, 'error ' + e.code + ': ' + e.message); }, {enableHighAccuracy:true, timeout:20000, maximumAge:0});
-};
+// ───────── screens ─────────
+let current = '';
+function view(name, html) {
+  if (current === 'pickup' && name !== 'pickup') stopCamera();
+  current = name; $('app').innerHTML = html; window.scrollTo(0, 0);
+  $('who').innerHTML = S ? esc(S.user.name) + (S.user.admin ? '<span class="badge">مدير</span>' : '') : '';
+}
 
-// 3) localStorage persistence
-(function () {
-  try {
-    var n = (parseInt(localStorage.getItem('sol_spike_n'), 10) || 0) + 1;
-    var first = localStorage.getItem('sol_spike_first') || new Date().toISOString();
-    localStorage.setItem('sol_spike_n', n); localStorage.setItem('sol_spike_first', first);
-    var msg = 'opened ' + n + ' time(s), first: ' + first;
-    if (n >= 2) set('ls', true, msg); else note('ls', msg + ' - reload the page now');
-  } catch (e) { set('ls', false, 'localStorage error: ' + e.message); }
-})();
-$('ls-reload').onclick = function () { location.reload(); };
-
-// 4) tel / wa.me links (owner confirms by hand)
-var linkOk = {};
-Array.prototype.forEach.call(document.querySelectorAll('[data-link]'), function (b) {
-  b.onclick = function () {
-    var k = b.getAttribute('data-link');
-    if (k === 'none') { linkOk = {}; return set('link', false, 'owner: nothing worked'); }
-    linkOk[k] = true;
-    var keys = Object.keys(linkOk);
-    set('link', (linkOk.tel1 || linkOk.tel2) && linkOk.wa ? true : false, 'worked: ' + keys.join(', '));
+function showLogin(msg) {
+  view('login', `
+    <h1>تسجيل الدخول</h1>
+    <p class="muted">أدخل رمزك الشخصي. سيتذكّر الجهاز دخولك، فلا تشارك رمزك مع أحد.</p>
+    <input id="pin" class="field" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="8" placeholder="••••••">
+    <div class="err" id="lerr">${esc(msg || '')}</div>
+    <button class="btn big" id="lbtn">دخول</button>`);
+  const go = async () => {
+    const pin = $('pin').value.trim();
+    if (!/^\d{4,8}$/.test(pin)) { $('lerr').textContent = 'أدخل الرمز المكوّن من أرقام فقط'; return; }
+    $('lbtn').disabled = true; $('lerr').textContent = '';
+    const r = await api('login', {pin});
+    $('lbtn').disabled = false;
+    if (!r.ok) { $('lerr').textContent = r.error || 'تعذّر الدخول'; return; }
+    S = {token: r.token, user: r.user}; store.set('sol_app', S);
+    showHome(); flushQueue();
   };
-});
-
-// 5) Photo capture + upload
-$('photo').onchange = function () {
-  var f = this.files && this.files[0]; if (!f) return;
-  note('photo', 'resizing ' + Math.round(f.size / 1024) + ' KB...');
-  var img = new Image(), url = URL.createObjectURL(f);
-  img.onload = function () {
-    var max = 1280, s = Math.min(1, max / Math.max(img.width, img.height));
-    var c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
-    var b64 = c.toDataURL('image/jpeg', 0.7).split(',')[1];
-    note('photo', 'uploading ' + Math.round(b64.length * 0.75 / 1024) + ' KB...');
-    if (!HAS_GAS) return set('photo', false, 'static mode: upload not wired yet');
-    var t0 = Date.now();
-    google.script.run.withSuccessHandler(function (r) {
-      set('photo', true, 'saved ' + Math.round(r.size / 1024) + ' KB in ' + (Date.now() - t0) + ' ms\n' + r.url);
-    }).withFailureHandler(function (e) { set('photo', false, 'upload error: ' + e.message); }).spikeSavePhoto(b64, 'spike-' + Date.now() + '.jpg');
-  };
-  img.onerror = function () { set('photo', false, 'could not read the image'); };
-  img.src = url;
-};
-
-// 6) Round trip
-function ping(cb) {
-  var t0 = Date.now();
-  if (HAS_GAS) return google.script.run.withSuccessHandler(function () { cb(null, Date.now() - t0); }).withFailureHandler(function (e) { cb(e); }).spikePing(t0);
-  fetch(EXEC + '?p=ping').then(function (r) { return r.json(); }).then(function () { cb(null, Date.now() - t0); }, cb);
+  $('lbtn').onclick = go;
+  $('pin').onkeydown = e => { if (e.key === 'Enter') go(); };
+  setTimeout(() => $('pin').focus(), 50);
 }
-$('rt').onclick = function () {
-  var times = [], n = 5; note('rt', 'measuring...');
-  (function next() {
-    ping(function (err, ms) {
-      if (err) return set('rt', false, 'error: ' + (err.message || err));
-      times.push(ms);
-      if (times.length < n) return next();
-      var avg = Math.round(times.reduce(function (a, b) { return a + b; }, 0) / n);
-      set('rt', true, 'avg ' + avg + ' ms | min ' + Math.min.apply(null, times) + ' | max ' + Math.max.apply(null, times) + ' | ' + times.join(', '));
-    });
-  })();
-};
 
-// Send results
-$('send').onclick = function () {
-  var payload = {results:R, details:D, mode:HAS_GAS ? 'gas' : 'static'};
-  note('send', 'sending...');
-  if (HAS_GAS) return google.script.run.withSuccessHandler(function () { note('send', 'sent - thank you'); })
-    .withFailureHandler(function (e) { note('send', 'error: ' + e.message); }).spikeReport(payload);
-  fetch(EXEC + '?p=report&d=' + encodeURIComponent(JSON.stringify(payload)))
-    .then(function () { note('send', 'sent - thank you'); }, function (e) { note('send', 'error: ' + e); });
-};
+function logout(expired) {
+  const tok = S && S.token;
+  S = null; store.set('sol_app', null);
+  if (tok && !expired) fetch(EXEC, {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: JSON.stringify({api: 'logout', token: tok})}).catch(() => {});
+  showLogin(expired ? 'انتهت الجلسة، سجّل الدخول مرة أخرى' : '');
+}
+
+function noteHtml(n) {
+  const r = n.r;
+  if (!r.ok) return `<div class="banner">${esc(n.label)}: ${esc(r.error || 'تعذّر الإرسال')}</div>`;
+  let h = `<div class="banner okb">${esc(n.label)} — تم الإرسال: استلمت ${r.sum.orders} طلبًا = ${r.sum.bags} طردًا، المطلوب تحصيله ${money(r.sum.amount)} جنيهًا</div>`;
+  (r.rejected || []).forEach(x => { h += `<div class="banner">الطلب ${esc(x.order)}: ${esc(x.error)}</div>`; });
+  return h;
+}
+
+function showHome() {
+  const n = pick ? Object.keys(pick.orders).length : 0;
+  view('home', `
+    ${notes.map(noteHtml).join('')}
+    ${notes.length ? '<button class="btn ghost" id="clr">إخفاء الإشعارات</button>' : ''}
+    <button class="btn big" id="bPick">استلام طلبات${n ? ' (جارٍ: ' + n + ')' : ''}</button>
+    <button class="btn big dark" id="bMine">طلباتي</button>
+    ${S.user.admin ? `<h2>وظائف المدير</h2><a class="btn terra" href="${PRINT_URL}" target="_blank" rel="noopener">طباعة البوالص</a>` : ''}
+    <button class="btn ghost" id="bOut">تسجيل الخروج</button>`);
+  $('bPick').onclick = () => { unlockAudio(); showPickup(); };
+  $('bMine').onclick = showMine;
+  $('bOut').onclick = () => { if (confirm('هل تريد تسجيل الخروج من هذا الجهاز؟')) logout(false); };
+  if ($('clr')) $('clr').onclick = () => { notes = []; store.set('sol_notes', notes); showHome(); };
+}
+
+async function showMine() {
+  view('mine', `<h1>طلباتي</h1><div id="mlist" class="muted">جارٍ التحميل…</div><button class="btn ghost" id="back">رجوع</button>`);
+  $('back').onclick = showHome;
+  const r = await api('myOrders');
+  if (current !== 'mine') return;
+  if (!r.ok) { $('mlist').innerHTML = `<div class="err">${esc(r.error)}</div>`; return; }
+  $('mlist').innerHTML = !r.orders.length ? '<p>لا توجد طلبات معك الآن.</p>' :
+    `<div class="summary">معك ${r.orders.length} طلبًا، المطلوب تحصيله ${money(r.amount)} جنيهًا</div>` +
+    r.orders.map(o => `<div class="card"><div class="top"><span class="num">#${esc(o.order)}</span><span class="tag ok">${esc(o.status)}</span><span class="amt">${o.prepaid ? 'مدفوع مسبقًا' : money(o.amount) + ' ج'}</span></div>
+      <div>${esc(o.customer)}</div><div class="muted">${esc(o.city)}${o.area ? ' — ' + esc(o.area) : ''} · ${o.bags} طرود</div></div>`).join('');
+}
+
+// ───────── pickup ─────────
+function savePick() { store.set('sol_pick', pick); }
+function pickTotals() {
+  let orders = 0, bags = 0, amount = 0; const incomplete = [], unverified = [];
+  Object.keys(pick.orders).forEach(id => {
+    const o = pick.orders[id];
+    if (o.unv.length) unverified.push(id);
+    if (o.bags.length + o.unv.length < o.total) { incomplete.push(id); return; }
+    orders++; bags += o.bags.length + o.unv.length; amount += o.card ? o.card.amount : 0;
+  });
+  return {orders, bags, amount, incomplete, unverified};
+}
+
+function showPickup() {
+  pick = pick || {orders: {}}; savePick();
+  view('pickup', `
+    <h1>استلام طلبات</h1>
+    <div id="reader"></div>
+    <div class="err" id="camerr"></div>
+    <div class="row"><input id="man" class="field" inputmode="numeric" pattern="[0-9]*" placeholder="رقم الطلب"><button class="btn" id="manBtn" style="max-width:130px">إضافة</button></div>
+    <div id="plist"></div>
+    <div class="sticky"><button class="btn big terra" id="pDone">إنهاء ومراجعة</button><button class="btn ghost" id="pBack">رجوع</button></div>`);
+  $('manBtn').onclick = manualAdd;
+  $('man').onkeydown = e => { if (e.key === 'Enter') manualAdd(); };
+  $('pDone').onclick = showSummary;
+  $('pBack').onclick = showHome;
+  renderPick();
+  startCamera();
+}
+
+function renderPick() {
+  const el = $('plist'); if (!el) return;
+  const ids = Object.keys(pick.orders);
+  if (!ids.length) { el.innerHTML = '<p class="muted">وجّه الكاميرا إلى رمز QR على كل طرد. يمكنك مسح الطرود واحدًا تلو الآخر دون توقف.</p>'; return; }
+  el.innerHTML = ids.slice().reverse().map(id => {
+    const o = pick.orders[id], c = o.card || {}, got = o.bags.length + o.unv.length;
+    const chips = [];
+    for (let n = 1; n <= o.total; n++) {
+      const code = `SOL:${id}-${n}/${o.total}`;
+      chips.push(`<span class="chip ${o.bags.includes(code) ? 'on' : o.unv.includes(code) ? 'unv' : ''}">${n} من ${o.total}</span>`);
+    }
+    const tag = got < o.total ? `<span class="tag miss">ناقص ${o.total - got}</span>` : o.unv.length ? '<span class="tag unv">لم يُتحقق بعد</span>' : '<span class="tag ok">مكتمل</span>';
+    return `<div class="card"><div class="top"><span class="num">#${esc(id)}</span>${tag}<span class="amt">${c.prepaid ? 'مدفوع مسبقًا' : c.amount != null ? money(c.amount) + ' ج' : ''}</span><button class="x" data-rm="${esc(id)}" aria-label="حذف">×</button></div>
+      ${c.customer ? `<div>${esc(c.customer)}</div><div class="muted">${esc(c.city)}${c.area ? ' — ' + esc(c.area) : ''}</div>` : '<div class="muted">سيُتحقق من الطلب عند عودة الاتصال</div>'}
+      <div class="chips">${chips.join('')}</div></div>`;
+  }).join('');
+  el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
+    if (!confirm('حذف الطلب ' + b.dataset.rm + ' من قائمة الاستلام؟')) return;
+    delete pick.orders[b.dataset.rm]; savePick(); renderPick();
+  });
+}
+
+function startCamera() {
+  if (typeof Html5Qrcode === 'undefined') { $('camerr').textContent = 'تعذّر تحميل قارئ الرموز — استخدم إدخال رقم الطلب يدويًا'; return; }
+  try {
+    scanner = new Html5Qrcode('reader', {verbose: false, formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], experimentalFeatures: {useBarCodeDetectorIfSupported: true}});
+    scanner.start({facingMode: 'environment'}, {fps: 10, qrbox: (w, h) => { const s = Math.floor(Math.min(w, h) * 0.75); return {width: s, height: s}; }}, onScan, () => {})
+      .catch(e => { $('camerr').textContent = 'لا يمكن فتح الكاميرا: اسمح للمتصفح باستخدامها ثم أعد المحاولة، أو أدخل رقم الطلب يدويًا. (' + (e && e.name || e) + ')'; });
+  } catch (e) { $('camerr').textContent = 'لا يمكن فتح الكاميرا (' + e + ')'; }
+}
+function stopCamera() {
+  const s = scanner; scanner = null;
+  if (s) { try { s.stop().then(() => s.clear()).catch(() => {}); } catch (e) {} }
+}
+
+function onScan(text) {
+  const now = Date.now();
+  text = String(text || '').trim();
+  if (busy) return;
+  if (text === lastText && now - lastAt < 2500) return; // the camera keeps reading the same label
+  lastText = text; lastAt = now;
+  handleCode(text);
+}
+
+async function handleCode(text) {
+  const m = text.match(/^SOL:(\d{1,10})-(\d{1,2})\/(\d{1,2})$/i);
+  if (!m || +m[2] < 1 || +m[2] > +m[3]) return flash('bad', 'هذا ليس رمز بوليصة سوليتا', 'امسح رمز QR الموجود على البوليصة أو أدخل رقم الطلب');
+  const id = m[1], total = +m[3], code = `SOL:${id}-${+m[2]}/${total}`, o = pick.orders[id];
+  if (o && (o.bags.includes(code) || o.unv.includes(code))) return flash('info', 'مسحت هذا الطرد من قبل', `الطلب ${id} — الطرد ${+m[2]} من ${total}`);
+  busy = true;
+  const r = await api('pickupScan', {code});
+  busy = false;
+  if (current !== 'pickup') return;
+  if (r.offline) {
+    const x = pick.orders[id] = pick.orders[id] || {card: null, total, bags: [], unv: []};
+    if (x.total !== total) return flash('bad', 'هذا الطرد لا يطابق طرود الطلب نفسه', 'عدد الطرود مختلف في البوليصتين');
+    x.unv.push(code); savePick(); renderPick();
+    return flash('info', `طرد ${+m[2]} من ${total} — الطلب ${id}`, 'لا يوجد اتصال: سيُتحقق منه عند الإرسال');
+  }
+  if (!r.ok) return flash('bad', r.error || 'حدث خطأ');
+  if (r.kind === 'block') return flash('bad', r.msg, 'الطلب ' + id);
+  if (r.kind === 'mine') return flash('info', r.msg, 'الطلب ' + id);
+  addBags(r.order, [code]);
+  const x = pick.orders[id], got = x.bags.length + x.unv.length;
+  flash('ok', `طرد ${+m[2]} من ${total} — الطلب ${id}`, got < x.total ? `هذا الطلب ${x.total} طرود، مسحت ${got} فقط` : 'اكتمل الطلب ✓');
+}
+
+function addBags(card, codes) {
+  const id = card.order, x = pick.orders[id] = pick.orders[id] || {card, total: card.bags, bags: [], unv: []};
+  x.card = card; x.total = card.bags;
+  codes.forEach(c => { x.unv = x.unv.filter(k => k !== c); if (!x.bags.includes(c)) x.bags.push(c); });
+  savePick(); renderPick();
+}
+
+async function manualAdd() {
+  unlockAudio();
+  const v = $('man').value.replace(/\D/g, '');
+  if (!v) return;
+  $('manBtn').disabled = true;
+  const r = await api('pickupScan', {code: v});
+  $('manBtn').disabled = false;
+  if (r.offline) return flash('bad', 'إدخال رقم الطلب يدويًا يحتاج اتصالًا بالإنترنت', 'امسح رمز QR بدلًا من ذلك');
+  if (!r.ok) return flash('bad', r.error || 'حدث خطأ');
+  if (r.kind === 'block') return flash('bad', r.msg, 'الطلب ' + v);
+  if (r.kind === 'mine') return flash('info', r.msg, 'الطلب ' + v);
+  $('man').value = '';
+  pickBags(r.order);
+}
+
+// manual entry: the courier ticks each bag he actually holds (so the missing-bag check still works)
+function pickBags(card) {
+  const have = (pick.orders[card.order] || {bags: []}).bags, sel = new Set();
+  let btns = '';
+  for (let n = 1; n <= card.bags; n++) {
+    const code = `SOL:${card.order}-${n}/${card.bags}`;
+    btns += `<button data-c="${code}" class="${have.includes(code) ? 'on' : ''}" ${have.includes(code) ? 'disabled' : ''}>${n} من ${card.bags}</button>`;
+  }
+  $('sheet').innerHTML = `<h2>الطلب #${esc(card.order)} — ${esc(card.customer)}</h2>
+    <p class="muted">هذا الطلب ${card.bags} طرود. اضغط على كل طرد موجود في يدك الآن.</p>
+    <div class="bagpick">${btns}</div>
+    <button class="btn" id="bpOk">إضافة الطرود المحددة</button><button class="btn ghost" id="bpNo">إلغاء</button>`;
+  $('modal').classList.remove('hidden');
+  $('sheet').querySelectorAll('.bagpick button:not([disabled])').forEach(b => b.onclick = () => { b.classList.toggle('on'); b.classList.contains('on') ? sel.add(b.dataset.c) : sel.delete(b.dataset.c); });
+  $('bpNo').onclick = () => $('modal').classList.add('hidden');
+  $('bpOk').onclick = () => {
+    if (!sel.size) return;
+    $('modal').classList.add('hidden');
+    addBags(card, [...sel]);
+    const x = pick.orders[card.order], got = x.bags.length;
+    flash(got < x.total ? 'info' : 'ok', `الطلب ${card.order}: ${got} من ${x.total}`, got < x.total ? `هذا الطلب ${x.total} طرود، مسحت ${got} فقط` : 'اكتمل الطلب ✓');
+  };
+}
+
+function showSummary() {
+  const t = pickTotals();
+  if (!Object.keys(pick.orders).length) return flash('info', 'لم تمسح أي طرد بعد');
+  view('summary', `
+    <h1>مراجعة الاستلام</h1>
+    ${t.incomplete.map(id => { const o = pick.orders[id], g = o.bags.length + o.unv.length; return `<div class="banner">الطلب ${esc(id)}: هذا الطلب ${o.total} طرود، مسحت ${g} فقط — لن يُستلم حتى تمسح باقي الطرود</div>`; }).join('')}
+    ${t.unverified.length ? `<div class="banner" style="background:#fbeed6;color:var(--warn)">طرود لم يُتحقق منها بعد (بلا اتصال): الطلب ${t.unverified.map(esc).join('، ')}. سيتحقق الخادم منها عند الإرسال.</div>` : ''}
+    <div class="summary">استلمت ${t.orders} طلبًا = ${t.bags} طردًا،<br>المطلوب تحصيله ${money(t.amount)} جنيهًا${t.unverified.length ? '<br><small>(بدون مبالغ الطلبات غير المتحقَّق منها)</small>' : ''}</div>
+    <button class="btn big" id="sOk" ${t.orders ? '' : 'disabled'}>تأكيد الاستلام</button>
+    <button class="btn ghost" id="sBack">متابعة المسح</button>`);
+  $('sBack').onclick = showPickup;
+  $('sOk').onclick = confirmPickup;
+}
+
+async function confirmPickup() {
+  const t = pickTotals(), ids = Object.keys(pick.orders).filter(id => !t.incomplete.includes(id));
+  const bags = []; ids.forEach(id => bags.push(...pick.orders[id].bags, ...pick.orders[id].unv));
+  const item = {qid: qid(), api: 'pickupConfirm', body: {bags}, at: Date.now(), label: 'استلام ' + ids.length + ' طلبًا'};
+  $('sOk').disabled = true; $('sOk').textContent = 'جارٍ الإرسال…';
+  const r = await api(item.api, Object.assign({qid: item.qid}, item.body), 45000);
+  const clearDone = () => { ids.forEach(id => delete pick.orders[id]); if (!Object.keys(pick.orders).length) pick = null; savePick(); };
+  if (r.offline) {
+    clearDone();
+    queue.push(item); saveQueue();
+    view('done', `<div class="banner" style="background:#fbeed6;color:var(--warn)">لا يوجد اتصال الآن. حُفظ الاستلام في الجهاز وسيُرسل تلقائيًا عند عودة الاتصال — لا تغلق التطبيق نهائيًا حتى يختفي «في انتظار الإرسال».</div><button class="btn big" id="dHome">الرئيسية</button>`);
+    $('dHome').onclick = showHome; return;
+  }
+  if (r.auth === false) return;
+  if (!r.ok) {
+    // the server refused the whole request → the scanned list stays for another try
+    view('done', `<div class="banner">${esc(r.error || 'تعذّر التأكيد')}</div><button class="btn big" id="dHome">الرئيسية</button>`);
+    $('dHome').onclick = showHome; return;
+  }
+  clearDone();
+  flash(r.rejected.length ? 'info' : 'ok', r.rejected.length ? 'تم الاستلام مع ملاحظات' : 'تم الاستلام ✓');
+  view('done', `
+    <div class="summary">استلمت ${r.sum.orders} طلبًا = ${r.sum.bags} طردًا،<br>المطلوب تحصيله ${money(r.sum.amount)} جنيهًا</div>
+    ${r.rejected.map(x => `<div class="banner">لم يُستلم الطلب ${esc(x.order)}: ${esc(x.error)}</div>`).join('')}
+    ${r.accepted.map(o => `<div class="card"><div class="top"><span class="num">#${esc(o.order)}</span><span class="tag ok">${o.already ? 'كان معك بالفعل' : 'مع المندوب'}</span><span class="amt">${o.prepaid ? 'مدفوع مسبقًا' : money(o.amount) + ' ج'}</span></div><div>${esc(o.customer)}</div><div class="muted">${esc(o.city)}${o.area ? ' — ' + esc(o.area) : ''} · ${o.bags} طرود</div></div>`).join('')}
+    <button class="btn big" id="dHome">الرئيسية</button>`);
+  $('dHome').onclick = showHome;
+}
+
+// ───────── start ─────────
+$('ver').textContent = VERSION; setNet(); renderQbar();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=' + VERSION).catch(() => {});
+if (!S) showLogin();
+else {
+  showHome(); flushQueue();
+  api('me').then(r => { if (r.ok) { S.user = r.user; store.set('sol_app', S); if (current === 'home') showHome(); } });
+}
 </script>
 </body>
 </html>
