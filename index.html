@@ -108,17 +108,29 @@ var NAMES = {qr:'QR', gps:'GPS', ls:'LocalStorage', link:'tel / WhatsApp', photo
 var R = {qr:null, gps:null, ls:null, link:null, photo:null, rt:null};
 var D = {};
 
+function save() { try { localStorage.setItem('sol_spike_state', JSON.stringify({R:R, D:D})); } catch (e) {} }
 function set(k, ok, msg) {
   R[k] = ok; if (msg !== undefined) { D[k] = msg; $('l-' + k).textContent = msg; }
   var s = $('s-' + k); s.className = 'st ' + (ok ? 'pass' : 'fail'); s.textContent = ok ? 'PASS' : 'FAIL';
-  renderSummary();
+  renderSummary(); save();
 }
+// restore results from before a reload (so nothing is lost)
+try {
+  var old = JSON.parse(localStorage.getItem('sol_spike_state') || 'null');
+  if (old) setTimeout(function () {
+    for (var k in NAMES) {
+      if (k === 'ls') continue;
+      if (old.R[k] === true || old.R[k] === false) set(k, old.R[k], old.D[k] || '');
+      else if (old.D[k]) note(k, old.D[k]);
+    }
+  }, 0);
+} catch (e) {}
 function renderSummary() {
   var html = '';
   for (var k in NAMES) html += '<li>' + (R[k] === true ? '&#9989; ' : R[k] === false ? '&#10060; ' : '&#9711; ') + NAMES[k] + '</li>';
   $('summary').innerHTML = html;
 }
-function note(k, msg) { $('l-' + k).textContent = msg; D[k] = msg; }
+function note(k, msg) { $('l-' + k).textContent = msg; D[k] = msg; save(); }
 
 // device info
 var inFrame = (function () { try { return window.top !== window; } catch (e) { return true; } })();
@@ -145,6 +157,10 @@ function beep() {
   if (navigator.vibrate) navigator.vibrate(120);
 }
 $('qr-start').onclick = function () {
+  try { startQr(); } catch (e) { set('qr', false, 'exception: ' + (e && e.message || e)); }
+};
+function startQr() {
+  note('qr', 'button tapped');
   try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch (e) {}
   if (typeof Html5Qrcode === 'undefined') return set('qr', false, 'library did not load');
   if (!scanner) scanner = new Html5Qrcode('reader', {verbose:false, experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
@@ -158,7 +174,7 @@ $('qr-start').onclick = function () {
   }, function () {}).then(function () {
     if (!R.qr) note('qr', 'camera on in ' + (Date.now() - t0) + ' ms - point it at a QR code');
   }).catch(function (e) { set('qr', false, 'camera error: ' + (e && (e.name || e.message) || e)); });
-};
+}
 $('qr-stop').onclick = function () { if (scanner && scanner.isScanning) scanner.stop(); };
 
 // 2) Geolocation
