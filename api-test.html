@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solita &#x2014; &#x627;&#x62E;&#x62A;&#x628;&#x627;&#x631; &#x627;&#x644;&#x627;&#x62A;&#x635;&#x627;&#x644; &#x628;&#x627;&#x644;&#x62E;&#x627;&#x62F;&#x645;</title>
+<style>
+  body { margin:0; background:#F5F1E8; color:#1C1C1A; font:16px/1.5 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif; padding:12px 16px 40px; max-width:560px; }
+  .card { background:#fffdf8; border:1px solid #B7AA96; border-radius:12px; padding:12px; margin:12px 0; }
+  input, button { font:inherit; padding:10px 12px; border-radius:10px; margin:4px 0; }
+  input { border:1px solid #B7AA96; width:100%; box-sizing:border-box; }
+  button { border:0; background:#4A5140; color:#F5F1E8; cursor:pointer; }
+  pre { white-space:pre-wrap; word-break:break-all; font-size:13px; background:#efe9dc; padding:8px; border-radius:8px; }
+  small { color:#6b665c; }
+</style>
+</head>
+<body>
+<h1>&#x627;&#x62E;&#x62A;&#x628;&#x627;&#x631; &#x627;&#x644;&#x627;&#x62A;&#x635;&#x627;&#x644; &#x628;&#x627;&#x644;&#x62E;&#x627;&#x62F;&#x645;</h1>
+<small>&#x627;&#x644;&#x625;&#x635;&#x62F;&#x627;&#x631; 1 &#x2014; &#x635;&#x641;&#x62D;&#x629; &#x627;&#x62E;&#x62A;&#x628;&#x627;&#x631; &#x641;&#x642;&#x637;.</small>
+<div class="card">
+  <b>&#x661;) &#x62A;&#x633;&#x62C;&#x64A;&#x644; &#x627;&#x644;&#x62F;&#x62E;&#x648;&#x644;</b>
+  <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="&#x627;&#x644;&#x631;&#x645;&#x632; &#x627;&#x644;&#x633;&#x631;&#x64A;">
+  <button id="login">&#x62F;&#x62E;&#x648;&#x644;</button> <button id="me">&#x645;&#x646; &#x623;&#x646;&#x627;&#x61F;</button> <button id="logout">&#x62E;&#x631;&#x648;&#x62C;</button>
+</div>
+<div class="card">
+  <b>&#x662;) &#x639;&#x631;&#x636; &#x637;&#x644;&#x628;</b>
+  <input id="code" placeholder="&#x631;&#x642;&#x645; &#x627;&#x644;&#x637;&#x644;&#x628; &#x623;&#x648; SOL:123-1/2">
+  <button id="get">&#x639;&#x631;&#x636;</button> <button id="call">&#x62A;&#x633;&#x62C;&#x64A;&#x644; &#xAB;&#x627;&#x62A;&#x635;&#x627;&#x644;&#xBB;</button>
+</div>
+<pre id="out"></pre>
+<script>
+const EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec';
+const $ = id => document.getElementById(id), out = $('out');
+const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
+async function api(body) {
+  const t0 = performance.now();
+  try {
+    const r = await fetch(EXEC, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (j.auth === false) store.set('sol_token', null);
+    show(body.api, j, t0); return j;
+  } catch (e) { show(body.api, { ok: false, error: String(e) }, t0); return null; }
+}
+function show(a, j, t0) { out.textContent = a + ' (' + Math.round(performance.now() - t0) + ' ms)\n' + JSON.stringify(j, null, 2); window.__last = { a, j }; }
+$('login').onclick = async () => { const j = await api({ api: 'login', pin: $('pin').value }); $('pin').value = ''; if (j && j.ok) store.set('sol_token', j.token); };
+$('me').onclick = () => api({ api: 'me', token: store.get('sol_token') });
+$('logout').onclick = async () => { await api({ api: 'logout', token: store.get('sol_token') }); store.set('sol_token', null); };
+$('get').onclick = () => api({ api: 'getOrder', token: store.get('sol_token'), code: $('code').value });
+$('call').onclick = () => api({ api: 'logEvent', token: store.get('sol_token'), action: '\u0627\u062A\u0635\u0627\u0644', order: $('code').value });
+</script>
+</body>
+</html>
