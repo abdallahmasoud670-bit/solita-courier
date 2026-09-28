@@ -100,7 +100,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 'use strict';
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 const EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec';
 const PRINT_URL = EXEC + '?p=print';
 const $ = id => document.getElementById(id);
@@ -800,7 +800,12 @@ function renderStaff() {
     ${staff.map(c => `<div class="card">
       <div class="top"><span class="num">${esc(c.name)}</span>
         <span class="tag ${c.admin ? 'ok' : c.active ? 'ok' : 'miss'}" style="margin-inline-start:auto">${c.admin ? 'مدير' : c.active ? 'نشط' : 'موقوف مؤقتًا'}</span></div>
-      <div class="muted">الكود ${esc(c.code)}${c.phone ? ' · ' + esc(c.phone) : ''}${holds(c) ? ' · ' + holds(c) : ' · لا شيء معه'}</div>
+      <div class="muted">الكود ${esc(c.code)}${holds(c) ? ' · ' + holds(c) : ' · لا شيء معه'}</div>
+      <div class="top" style="margin-top:8px"><span style="font-size:19px;font-weight:700;direction:ltr">${c.phone ? esc(c.phone) : '<span class="muted">لا يوجد رقم</span>'}</span>
+        <button class="btn ghost" style="width:auto;min-height:40px;font-size:15px;margin:0 auto 0 0;padding:4px 12px" data-phone="${esc(c.code)}">${c.phone ? 'تعديل الرقم' : 'إضافة رقم'}</button></div>
+      ${c.phone ? `<div class="row"><a class="btn" href="tel:${esc(c.phone)}">📞 اتصال</a><a class="btn" style="background:#1f7a4d" href="https://wa.me/2${esc(c.phone)}" target="_blank" rel="noopener">واتساب</a></div>` : ''}
+      ${c.admin ? '' : `<div class="top" style="margin-top:4px"><span>رمز الدخول: <b data-pinv="${esc(c.code)}" style="font-size:20px;letter-spacing:3px;direction:ltr;display:inline-block">${c.pin ? '••••••' : '<span class="muted" style="letter-spacing:0">غير محفوظ — اضغط «رمز دخول جديد» مرة واحدة ليُحفظ</span>'}</b></span>
+        ${c.pin ? `<button class="btn ghost" style="width:auto;min-height:40px;font-size:15px;margin:0 auto 0 0;padding:4px 12px" data-show="${esc(c.code)}">إظهار</button>` : ''}</div>`}
       ${c.admin ? '<div class="muted">حساب المدير لا يُعدَّل من هنا.</div>' : `
       <button class="btn" data-pin="${esc(c.code)}">رمز دخول جديد</button>
       <div class="row">
@@ -812,6 +817,12 @@ function renderStaff() {
   $('back').onclick = showBoard;
   $('bAdd').onclick = addStaffSheet;
   const on = (attr, fn) => $('app').querySelectorAll('[data-' + attr + ']').forEach(x => x.onclick = () => fn(staff.find(c => c.code === x.dataset[attr])));
+  on('show', c => {
+    const el = document.querySelector(`[data-pinv="${c.code}"]`), b = document.querySelector(`[data-show="${c.code}"]`);
+    const hidden = el.textContent.indexOf('•') >= 0;
+    el.textContent = hidden ? c.pin : '••••••'; b.textContent = hidden ? 'إخفاء' : 'إظهار';
+  });
+  on('phone', c => phoneSheet(c));
   on('pin', c => staffAct('staffPin', c, `إنشاء رمز دخول جديد لـ ${c.name}؟\n\nالرمز القديم سيتوقف، وسيُسجَّل خروجه من أي موبايل.`));
   on('pause', c => staffAct('staffPause', c, `إيقاف ${c.name} مؤقتًا؟\n\nلن يستطيع الدخول إلى التطبيق حتى تعيد تفعيله.` + (c.orders ? `\n\nتنبيه: معه ${c.orders} طلب لم ينتهِ، ولن يستطيع تسليمها وهو موقوف.` : '')));
   on('resume', c => staffAct('staffResume', c, `إعادة تفعيل ${c.name}؟ سيدخل بالرمز نفسه.`));
@@ -828,6 +839,23 @@ async function staffAct(action, c, question) {
   if (r.pin) { pinSheet(r, false, c.phone); return; }
   flash('ok', action === 'staffPause' ? 'أُوقف ' + r.name : action === 'staffResume' ? 'أُعيد تفعيل ' + r.name : 'أُزيل ' + r.name);
   showStaff();
+}
+function phoneSheet(c) {
+  $('sheet').innerHTML = `<h2>رقم ${esc(c.name)}</h2>
+    <input id="fPhone" class="field" inputmode="tel" placeholder="01xxxxxxxxx" maxlength="11" value="${esc(c.phone || '')}">
+    <div class="err" id="fErr"></div>
+    <div class="row"><button class="btn ghost" id="fNo">إلغاء</button><button class="btn terra" id="fOk">حفظ</button></div>`;
+  $('modal').classList.remove('hidden');
+  $('fNo').onclick = () => $('modal').classList.add('hidden');
+  $('fOk').onclick = async () => {
+    const phone = $('fPhone').value.replace(/\D/g, '');
+    if (phone && !/^0\d{10}$/.test(phone)) { $('fErr').textContent = 'رقم الموبايل 11 رقمًا ويبدأ بصفر'; return; }
+    $('fOk').disabled = true;
+    const r = await api('staffPhone', {code: c.code, phone}, 40000);
+    $('fOk').disabled = false;
+    if (!r.ok) { $('fErr').textContent = r.offline ? 'يحتاج اتصالًا بالإنترنت' : (r.error || 'تعذّر الحفظ'); return; }
+    $('modal').classList.add('hidden'); flash('ok', 'حُفظ الرقم ✓'); showStaff();
+  };
 }
 function addStaffSheet() {
   const q = qid();
@@ -849,19 +877,19 @@ function addStaffSheet() {
     pinSheet(r, true, phone);
   };
 }
-// the PIN is shown ONCE — only its hash is stored
+// PIN sheet after add / new PIN (a readable copy is kept server-side for the owner)
 function pinSheet(r, isNew, phone) {
   const msg = `أهلًا ${r.name}،\nرابط تطبيق مندوبي سوليتا:\n${APP_URL}\nرمز الدخول الخاص بك: ${r.pin}\nلا تعطِ هذا الرمز لأي شخص.`;
   const wa = 'https://wa.me/' + (phone ? '2' + phone : '') + '?text=' + encodeURIComponent(msg);
   $('sheet').innerHTML = `<h2>${isNew ? 'أُضيف ' + esc(r.name) + ' ✓' : 'رمز جديد لـ ' + esc(r.name) + ' ✓'}</h2>
-    <div class="muted">رمز الدخول (يظهر مرة واحدة فقط — أرسله له الآن):</div>
+    <div class="muted">رمز الدخول (محفوظ، وتستطيع رؤيته لاحقًا من «إدارة المندوبين» بزر «إظهار»):</div>
     <div style="font-size:44px;font-weight:800;letter-spacing:8px;text-align:center;direction:ltr;margin:10px 0">${esc(r.pin)}</div>
     <a class="btn terra" href="${esc(wa)}" target="_blank" rel="noopener">إرسال الرابط والرمز له على واتساب</a>
     <button class="btn" id="pCopy">نسخ الرسالة</button>
     <button class="btn ghost" id="pDone">تم</button>`;
   $('modal').classList.remove('hidden');
   $('pCopy').onclick = async () => { try { await navigator.clipboard.writeText(msg); flash('ok', 'نُسخت الرسالة'); } catch (e) { prompt('انسخ الرسالة:', msg); } };
-  $('pDone').onclick = () => { if (confirm('هل أرسلت الرمز؟ لن يظهر مرة أخرى.')) { $('modal').classList.add('hidden'); showStaff(); } };
+  $('pDone').onclick = () => { $('modal').classList.add('hidden'); showStaff(); };
 }
 
 // ───────── admin: «بانتظار التقييم» + performance (Task 8) ─────────
