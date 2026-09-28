@@ -97,7 +97,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 'use strict';
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 const EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec';
 const PRINT_URL = EXEC + '?p=print';
 const $ = id => document.getElementById(id);
@@ -518,7 +518,7 @@ function formPostpone(o, bag) {
 }
 
 // ───────── Task 6: partial delivery, exchange, returns ─────────
-const PART_REASONS = [['size', 'مشكلة في المقاس', 'المتجر يتحمّل الشحن'], ['defect', 'عيب صناعة', 'صورة العيب إلزامية — المتجر يتحمّل الشحن'], ['other', 'سبب آخر', 'يدفع العميل رسوم توصيل جديدة']];
+const PART_REASONS = [['size', 'مشكلة في المقاس', 'المتجر يتحمّل الشحن'], ['defect', 'عيب صناعة', 'صورة العيب إلزامية — المتجر يتحمّل الشحن'], ['other', 'سبب آخر', 'اكتب السبب — تقرّر الإدارة لاحقًا أمر رسوم الشحن وتبلّغ العميل']];
 
 // photo → max 1280 px JPEG → Apps Script (Drive). Needs a connection.
 function readPhoto(file) {
@@ -538,9 +538,9 @@ function readPhoto(file) {
 function formPartial(o, bag) {
   const sel = new Set(), photo = {id: '', uploading: false};
   const calc = () => {
-    const rs = $('app').querySelector('input[name=rs]:checked'), back = o.bagList.filter(b => sel.has(b.id)).reduce((a, b) => a + b.price, 0);
-    const fee = rs && rs.value === 'other' ? o.fee : 0, amt = o.prepaid ? 0 : Math.max(0, o.amount - back) + fee;
-    return {amt, back, fee};
+    const back = o.bagList.filter(b => sel.has(b.id)).reduce((a, b) => a + b.price, 0);
+    const amt = o.prepaid ? 0 : Math.max(0, o.amount - back);
+    return {amt, back};
   };
   view('form', `<h1>تم تسليم جزء — #${esc(o.order)}</h1>
     <p>اضغط على كل طرد <b>أعاده العميل</b> (يبقى معك ثم تسلّمه للمخزن):</p>
@@ -559,7 +559,7 @@ function formPartial(o, bag) {
   const upd = () => {
     const c = calc(), rs = $('app').querySelector('input[name=rs]:checked');
     $('phBox').classList.toggle('hidden', !(rs && rs.value === 'defect'));
-    $('calc').innerHTML = sel.size ? `المرتجع ${sel.size} طرد (${money(c.back)} ج)${c.fee ? ' + رسوم توصيل ' + money(c.fee) : ''}<br>المطلوب تحصيله الآن: ${money(c.amt)} جنيهًا` : 'اختر الطرود المرتجعة';
+    $('calc').innerHTML = sel.size ? `المرتجع ${sel.size} طرد (${money(c.back)} ج)<br>المطلوب تحصيله الآن: ${money(c.amt)} جنيهًا` : 'اختر الطرود المرتجعة';
     if (!typed) $('amt').value = c.amt;
     const n = +$('amt').value.replace(/\D/g, '');
     $('whyBox').classList.toggle('hidden', n === c.amt);
