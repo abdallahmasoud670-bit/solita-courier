@@ -100,7 +100,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 'use strict';
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 const EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec';
 const PRINT_URL = EXEC + '?p=print';
 const $ = id => document.getElementById(id);
@@ -731,6 +731,7 @@ function renderBoard() {
     <h2>التنبيهات (${b.alerts.length})</h2>
     ${b.alerts.length ? b.alerts.map(a => `<div class="banner"><div>${esc(a.label)}${a.order ? ' — #' + esc(a.order) : ''}${a.courier ? ' — ' + esc(a.courier) : ''}</div><div style="font-weight:600">${esc(a.text)}</div></div>`).join('') : '<div class="banner okb">لا توجد تنبيهات ✓</div>'}
     <h2>المندوبون</h2>
+    <button class="btn dark" id="bStaff">إدارة المندوبين (إضافة، رمز جديد، إيقاف، إزالة)</button>
     ${b.couriers.map(c => `<div class="card">
       <div class="top"><span class="num">${esc(c.name)}</span><span class="amt" style="color:${balColor(c.balance)}">${money(c.balance)} ج</span></div>
       <div class="muted">معه ${c.orders} طلب (المطلوب تحصيله ${money(c.amount)}) · مرتجعات ${c.returns} · اليوم: ${c.visitsToday} زيارة، سلّم ${c.doneToday}، حصّل ${money(c.collectedToday)}</div>
@@ -742,6 +743,7 @@ function renderBoard() {
     <button class="btn ghost" id="back">رجوع</button>`);
   $('back').onclick = showHome;
   $('refresh').onclick = showBoard;
+  $('bStaff').onclick = showStaff;
   $('app').querySelectorAll('[data-settle]').forEach(x => x.onclick = () => settleSheet(x.dataset.settle));
 }
 function settleSheet(code) {
@@ -779,6 +781,87 @@ function settleSheet(code) {
     flash('ok', 'سُجّلت التسوية ✓', r.already ? 'سُجّلت من قبل' : 'الرصيد بعدها ' + money(r.balance) + ' جنيهًا');
     showBoard();
   };
+}
+
+// ───────── admin: courier management (add / new PIN / pause / remove) ─────────
+const APP_URL = 'https://abdallahmasoud670-bit.github.io/solita-courier/';
+let staff = null;
+async function showStaff() {
+  view('staff', '<h1>إدارة المندوبين</h1><p class="muted">جارٍ التحميل…</p>');
+  const r = await api('staff', {}, 60000);
+  if (current !== 'staff') return;
+  if (!r.ok) { view('staff', `<h1>إدارة المندوبين</h1><div class="banner">${esc(r.error || 'تعذّر التحميل')}</div><button class="btn ghost" id="back">رجوع</button>`); $('back').onclick = showBoard; return; }
+  staff = r.list; renderStaff();
+}
+function renderStaff() {
+  const holds = c => [c.orders ? 'معه ' + c.orders + ' طلب' : '', c.returns ? c.returns + ' مرتجع' : '', c.balance > 0 ? 'معه ' + money(c.balance) + ' ج' : c.balance < 0 ? 'له ' + money(-c.balance) + ' ج' : ''].filter(Boolean).join(' · ');
+  view('staff', `<h1>إدارة المندوبين</h1>
+    <button class="btn terra big" id="bAdd">＋ إضافة مندوب جديد</button>
+    ${staff.map(c => `<div class="card">
+      <div class="top"><span class="num">${esc(c.name)}</span>
+        <span class="tag ${c.admin ? 'ok' : c.active ? 'ok' : 'miss'}" style="margin-inline-start:auto">${c.admin ? 'مدير' : c.active ? 'نشط' : 'موقوف مؤقتًا'}</span></div>
+      <div class="muted">الكود ${esc(c.code)}${c.phone ? ' · ' + esc(c.phone) : ''}${holds(c) ? ' · ' + holds(c) : ' · لا شيء معه'}</div>
+      ${c.admin ? '<div class="muted">حساب المدير لا يُعدَّل من هنا.</div>' : `
+      <button class="btn" data-pin="${esc(c.code)}">رمز دخول جديد</button>
+      <div class="row">
+        ${c.active ? `<button class="btn dark" data-pause="${esc(c.code)}">إيقاف مؤقت</button>` : `<button class="btn" data-resume="${esc(c.code)}">إعادة تفعيل</button>`}
+        <button class="btn ghost" style="color:var(--bad);border-color:var(--bad)" data-remove="${esc(c.code)}">إزالة نهائيًا</button>
+      </div>`}
+    </div>`).join('')}
+    <button class="btn ghost" id="back">رجوع إلى اللوحة</button>`);
+  $('back').onclick = showBoard;
+  $('bAdd').onclick = addStaffSheet;
+  const on = (attr, fn) => $('app').querySelectorAll('[data-' + attr + ']').forEach(x => x.onclick = () => fn(staff.find(c => c.code === x.dataset[attr])));
+  on('pin', c => staffAct('staffPin', c, `إنشاء رمز دخول جديد لـ ${c.name}؟\n\nالرمز القديم سيتوقف، وسيُسجَّل خروجه من أي موبايل.`));
+  on('pause', c => staffAct('staffPause', c, `إيقاف ${c.name} مؤقتًا؟\n\nلن يستطيع الدخول إلى التطبيق حتى تعيد تفعيله.` + (c.orders ? `\n\nتنبيه: معه ${c.orders} طلب لم ينتهِ، ولن يستطيع تسليمها وهو موقوف.` : '')));
+  on('resume', c => staffAct('staffResume', c, `إعادة تفعيل ${c.name}؟ سيدخل بالرمز نفسه.`));
+  on('remove', c => {
+    if (c.orders || c.returns || c.balance) { flash('bad', 'لا يمكن إزالته الآن', holds(c) + ' — أنهِ ذلك أولًا، أو أوقفه مؤقتًا.'); return; }
+    if (!confirm(`إزالة ${c.name} نهائيًا؟\n\nلن يستطيع الدخول أبدًا، ولن يظهر في القوائم. سجلّه القديم (التسليمات والتسويات) يبقى محفوظًا.`)) return;
+    staffAct('staffRemove', c, `تأكيد أخير: إزالة ${c.name}؟ لا يمكن التراجع عن ذلك.`);
+  });
+}
+async function staffAct(action, c, question) {
+  if (!confirm(question)) return;
+  const r = await api(action, {code: c.code, qid: qid()}, 40000);
+  if (!r.ok) { flash('bad', r.offline ? 'هذه العملية تحتاج اتصالًا بالإنترنت' : (r.error || 'تعذّر التنفيذ')); return; }
+  if (r.pin) { pinSheet(r, false, c.phone); return; }
+  flash('ok', action === 'staffPause' ? 'أُوقف ' + r.name : action === 'staffResume' ? 'أُعيد تفعيل ' + r.name : 'أُزيل ' + r.name);
+  showStaff();
+}
+function addStaffSheet() {
+  const q = qid();
+  $('sheet').innerHTML = `<h2>إضافة مندوب جديد</h2>
+    <input id="nName" class="field" style="direction:rtl;text-align:right;font-size:19px" placeholder="الاسم (مثال: أحمد محمود)" maxlength="40">
+    <input id="nPhone" class="field" style="margin-top:8px;font-size:19px" inputmode="tel" placeholder="رقم الموبايل 01xxxxxxxxx" maxlength="11">
+    <div class="err" id="nErr"></div>
+    <div class="row"><button class="btn ghost" id="nNo">إلغاء</button><button class="btn terra" id="nOk">إضافة</button></div>`;
+  $('modal').classList.remove('hidden');
+  $('nNo').onclick = () => $('modal').classList.add('hidden');
+  $('nOk').onclick = async () => {
+    const name = $('nName').value.trim(), phone = $('nPhone').value.replace(/\D/g, '');
+    if (name.length < 2) { $('nErr').textContent = 'اكتب اسم المندوب'; return; }
+    if (phone && !/^0\d{10}$/.test(phone)) { $('nErr').textContent = 'رقم الموبايل 11 رقمًا ويبدأ بصفر (أو اتركه فارغًا)'; return; }
+    $('nOk').disabled = true; $('nErr').textContent = '';
+    const r = await api('staffAdd', {name, phone, qid: q}, 40000);
+    $('nOk').disabled = false;
+    if (!r.ok) { $('nErr').textContent = r.offline ? 'الإضافة تحتاج اتصالًا بالإنترنت' : (r.error || 'تعذّرت الإضافة'); return; }
+    pinSheet(r, true, phone);
+  };
+}
+// the PIN is shown ONCE — only its hash is stored
+function pinSheet(r, isNew, phone) {
+  const msg = `أهلًا ${r.name}،\nرابط تطبيق مندوبي سوليتا:\n${APP_URL}\nرمز الدخول الخاص بك: ${r.pin}\nلا تعطِ هذا الرمز لأي شخص.`;
+  const wa = 'https://wa.me/' + (phone ? '2' + phone : '') + '?text=' + encodeURIComponent(msg);
+  $('sheet').innerHTML = `<h2>${isNew ? 'أُضيف ' + esc(r.name) + ' ✓' : 'رمز جديد لـ ' + esc(r.name) + ' ✓'}</h2>
+    <div class="muted">رمز الدخول (يظهر مرة واحدة فقط — أرسله له الآن):</div>
+    <div style="font-size:44px;font-weight:800;letter-spacing:8px;text-align:center;direction:ltr;margin:10px 0">${esc(r.pin)}</div>
+    <a class="btn terra" href="${esc(wa)}" target="_blank" rel="noopener">إرسال الرابط والرمز له على واتساب</a>
+    <button class="btn" id="pCopy">نسخ الرسالة</button>
+    <button class="btn ghost" id="pDone">تم</button>`;
+  $('modal').classList.remove('hidden');
+  $('pCopy').onclick = async () => { try { await navigator.clipboard.writeText(msg); flash('ok', 'نُسخت الرسالة'); } catch (e) { prompt('انسخ الرسالة:', msg); } };
+  $('pDone').onclick = () => { if (confirm('هل أرسلت الرمز؟ لن يظهر مرة أخرى.')) { $('modal').classList.add('hidden'); showStaff(); } };
 }
 
 // ───────── admin: «بانتظار التقييم» + performance (Task 8) ─────────
