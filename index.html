@@ -100,7 +100,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 'use strict';
-const VERSION = '1.6.0';
+const VERSION = '2.0.0';
 const EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec';
 const PRINT_URL = EXEC + '?p=print';
 const $ = id => document.getElementById(id);
@@ -151,6 +151,8 @@ async function flushQueue() {
       if (r.auth === false) break;
       queue.shift(); saveQueue();
       if (it.api === 'callLog' && r.ok) continue; // calls: no notice unless refused
+      if (it.bg && r.ok) continue; // background action accepted: the screen already said «تم»
+      if (it.bg && !r.ok) flash('bad', 'لم يُسجَّل: ' + it.label, (r.error || 'رفض الخادم') + ' — أعد المحاولة من «طلباتي»');
       notes.unshift({at: Date.now(), label: it.label, r}); notes = notes.slice(0, 5); store.set('sol_notes', notes);
     }
   } finally { flushing = false; }
@@ -202,26 +204,81 @@ function view(name, html) {
   $('who').innerHTML = S ? esc(S.user.name) + (S.user.admin ? '<span class="badge">مدير</span>' : '') : '';
 }
 
+// this device's id (login is tied to it: one device per courier, the admin's email code works only on the device that asked)
+const DEV = store.get('sol_dev', '') || (() => { let d = ''; try { const a = new Uint8Array(12); crypto.getRandomValues(a); d = [...a].map(b => b.toString(16).padStart(2, '0')).join(''); } catch (e) { d = (Date.now().toString(16) + Math.random().toString(16).slice(2)).slice(0, 24); } store.set('sol_dev', d); return d; })();
+const loggedIn = r => { S = {token: r.token, user: r.user}; store.set('sol_app', S); showHome(); flushQueue(); };
+
 function showLogin(msg) {
   view('login', `
     <h1>تسجيل الدخول</h1>
-    <p class="muted">أدخل رمزك الشخصي. سيتذكّر الجهاز دخولك، فلا تشارك رمزك مع أحد.</p>
-    <input id="pin" class="field" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="8" placeholder="••••••">
+    <p class="muted">أدخل رقم موبايلك ورمزك الشخصي. سيتذكّر الجهاز دخولك، فلا تشارك رمزك مع أحد.</p>
+    <input id="lphone" class="field" type="tel" inputmode="tel" autocomplete="username" placeholder="رقم الموبايل">
+    <input id="pin" class="field" style="margin-top:8px" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" placeholder="الرمز">
     <div class="err" id="lerr">${esc(msg || '')}</div>
     <button class="btn big" id="lbtn">دخول</button>`);
+  $('lphone').value = store.get('sol_phone', '');
   const go = async () => {
-    const pin = $('pin').value.trim();
-    if (!/^\d{4,8}$/.test(pin)) { $('lerr').textContent = 'أدخل الرمز المكوّن من أرقام فقط'; return; }
+    const phone = $('lphone').value.replace(/\D/g, ''), pin = $('pin').value.replace(/\s/g, '');
+    if (!phone || !pin) { $('lerr').textContent = 'أدخل رقم الموبايل والرمز'; return; }
     $('lbtn').disabled = true; $('lerr').textContent = '';
-    const r = await api('login', {pin});
-    $('lbtn').disabled = false;
-    if (!r.ok) { $('lerr').textContent = r.error || 'تعذّر الدخول'; return; }
-    S = {token: r.token, user: r.user}; store.set('sol_app', S);
-    showHome(); flushQueue();
+    const r = await api('login', {phone, pin, dev: DEV, ua: navigator.userAgent});
+    $('lbtn').disabled = false; $('pin').value = '';
+    if (!r.ok) { $('lerr').textContent = r.offline ? 'لا يوجد اتصال بالإنترنت' : (r.error || 'تعذّر الدخول'); return; }
+    store.set('sol_phone', phone);
+    if (r.otp) return showOtp(r);
+    loggedIn(r);
   };
   $('lbtn').onclick = go;
   $('pin').onkeydown = e => { if (e.key === 'Enter') go(); };
-  setTimeout(() => $('pin').focus(), 50);
+  setTimeout(() => ($('lphone').value ? $('pin') : $('lphone')).focus(), 50);
+}
+// admin only: 6-digit code sent to the owner's email
+function showOtp(ch) {
+  view('login', `
+    <h1>كود التأكيد</h1>
+    <p>أرسلنا كودًا من 6 أرقام إلى بريدك <b style="direction:ltr;display:inline-block">${esc(ch.mail || '')}</b>. صالح 5 دقائق، وعلى هذا الجهاز فقط.</p>
+    <input id="otp" class="field" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="6" placeholder="الكود">
+    <div class="err" id="lerr"></div>
+    <button class="btn big" id="lbtn">تأكيد</button>
+    <button class="btn ghost" id="lback">رجوع</button>`);
+  $('lback').onclick = () => showLogin();
+  const go = async () => {
+    const code = $('otp').value.replace(/\D/g, '');
+    if (code.length !== 6) { $('lerr').textContent = 'الكود 6 أرقام'; return; }
+    $('lbtn').disabled = true; $('lerr').textContent = '';
+    const r = await api('adminOtp', {ch: ch.ch, code, dev: DEV});
+    $('lbtn').disabled = false;
+    if (!r.ok) { if (r.restart) return showLogin(r.error); $('lerr').textContent = r.offline ? 'لا يوجد اتصال بالإنترنت' : (r.error || 'تعذّر التأكيد'); $('otp').value = ''; return; }
+    loggedIn(r);
+  };
+  $('lbtn').onclick = go;
+  $('otp').onkeydown = e => { if (e.key === 'Enter') go(); };
+  setTimeout(() => $('otp').focus(), 50);
+}
+
+// sensitive admin actions: ask for the admin PIN again (kept in memory 2 minutes, never stored)
+let pin2Memo = null;
+function askPin2(title) {
+  if (pin2Memo && Date.now() - pin2Memo.at < 120000) return Promise.resolve(pin2Memo.v);
+  return new Promise(res => {
+    $('sheet').innerHTML = `<h2>${esc(title)}</h2>
+      <div class="muted">أدخل رمز المدير للتأكيد.</div>
+      <input id="p2" class="field" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
+      <div class="row"><button class="btn ghost" id="p2No">إلغاء</button><button class="btn terra" id="p2Ok">تأكيد</button></div>`;
+    $('modal').classList.remove('hidden');
+    const done = v => { $('modal').classList.add('hidden'); if (v) pin2Memo = {v, at: Date.now()}; res(v); };
+    $('p2No').onclick = () => done(null);
+    $('p2Ok').onclick = () => { const v = $('p2').value.replace(/\D/g, ''); if (v) done(v); };
+    $('p2').onkeydown = e => { if (e.key === 'Enter') $('p2Ok').click(); };
+    setTimeout(() => $('p2').focus(), 50);
+  });
+}
+// call an admin action that needs pin2; a wrong PIN clears the memo and shows the error
+async function apiPin2(title, action, body, ms) {
+  const pin2 = await askPin2(title); if (!pin2) return null;
+  const r = await api(action, Object.assign({pin2}, body), ms || 40000);
+  if (r.pin2) pin2Memo = null;
+  return r;
 }
 
 function logout(expired) {
@@ -248,7 +305,7 @@ function showHome() {
     <button class="btn big" id="bPick">استلام طلبات${n ? ' (جارٍ: ' + n + ')' : ''}</button>
     <button class="btn big dark" id="bMine">طلباتي</button>
     ${balHtml(bal)}
-    ${S.user.admin ? `<h2>وظائف المدير</h2><button class="btn big terra" id="bBoard">لوحة المندوبين والتسويات</button><button class="btn big" id="bRate">بانتظار التقييم (واتساب)</button><button class="btn big dark" id="bPerf">أداء المندوبين</button><button class="btn big dark" id="bRet">استلام مرتجع (مسح)</button><a class="btn terra" href="${PRINT_URL}" target="_blank" rel="noopener">طباعة البوالص والاستبدال</a>` : ''}
+    ${S.user.admin ? `<h2>وظائف المدير</h2><button class="btn big terra" id="bBoard">لوحة المندوبين والتسويات</button><button class="btn big" id="bRate">بانتظار التقييم (واتساب)</button><button class="btn big dark" id="bPerf">أداء المندوبين</button><button class="btn big dark" id="bRet">استلام مرتجع (مسح)</button><a class="btn terra" href="${PRINT_URL}" target="_blank" rel="noopener">طباعة البوالص والاستبدال</a><button class="btn dark" id="bDev">أجهزتي (الأجهزة المفتوح عليها حسابي)</button>` : ''}
     <button class="btn ghost" id="bOut">تسجيل الخروج</button>`);
   $('bPick').onclick = () => { unlockAudio(); showPickup(); };
   $('bMine').onclick = showMine;
@@ -256,9 +313,36 @@ function showHome() {
   if ($('bBoard')) $('bBoard').onclick = showBoard;
   if ($('bRate')) $('bRate').onclick = showRatePending;
   if ($('bPerf')) $('bPerf').onclick = () => showPerf('week');
+  if ($('bDev')) $('bDev').onclick = showDevices;
   loadBalance();
   $('bOut').onclick = () => { if (confirm('هل تريد تسجيل الخروج من هذا الجهاز؟')) logout(false); };
   if ($('clr')) $('clr').onclick = () => { notes = []; store.set('sol_notes', notes); showHome(); };
+}
+
+// ───────── admin: own devices ─────────
+const devName = ua => { ua = String(ua || ''); const os = /iPhone|iPad/.test(ua) ? 'آيفون' : /Android/.test(ua) ? 'أندرويد' : /Windows/.test(ua) ? 'ويندوز' : /Mac OS/.test(ua) ? 'ماك' : 'جهاز'; const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : /Firefox\//.test(ua) ? 'Firefox' : ''; return os + (br ? ' — ' + br : ''); };
+const tStr = ms => ms ? new Date(ms).toLocaleString('ar-EG', {day: 'numeric', month: 'numeric', hour: 'numeric', minute: '2-digit'}) : '—';
+async function showDevices() {
+  view('dev', '<h1>أجهزتي</h1><p class="muted">جارٍ التحميل…</p>');
+  const r = await api('myDevices');
+  if (current !== 'dev') return;
+  if (!r.ok) { view('dev', `<h1>أجهزتي</h1><div class="banner">${esc(r.error || 'تعذّر التحميل')}</div><button class="btn ghost" id="back">رجوع</button>`); $('back').onclick = showHome; return; }
+  view('dev', `<h1>أجهزتي</h1>
+    <p class="muted">كل جهاز مفتوح عليه حساب المدير. أي جهاز تاني بيحتاج رقمك + رمزك + كود الإيميل، ويطلب الكود تاني كل 7 أيام أو لو اتساب يوم كامل.</p>
+    ${r.list.map(d => `<div class="card"><div class="top"><b>${esc(devName(d.ua))}</b>${d.me ? '<span class="tag ok" style="margin-inline-start:auto">هذا الجهاز</span>' : ''}</div>
+      <div class="muted">فُتح ${esc(tStr(d.t))} · آخر استخدام ${esc(tStr(d.l))}</div>
+      ${d.me ? '' : `<button class="btn ghost" style="color:var(--bad);border-color:var(--bad)" data-kick="${esc(d.id)}">إخراج هذا الجهاز</button>`}</div>`).join('')}
+    ${r.list.length > 1 ? '<button class="btn terra" id="kAll">إخراج كل الأجهزة الأخرى</button>' : ''}
+    <button class="btn ghost" id="back">رجوع</button>`);
+  $('back').onclick = showHome;
+  const kick = async id => {
+    if (!confirm(id === 'others' ? 'إخراج كل الأجهزة الأخرى؟' : 'إخراج هذا الجهاز؟')) return;
+    const x = await api('kickDevice', {id});
+    if (!x.ok) return flash('bad', x.error || 'تعذّر التنفيذ');
+    flash('ok', 'تم الإخراج ✓'); showDevices();
+  };
+  $('app').querySelectorAll('[data-kick]').forEach(b => b.onclick = () => kick(b.dataset.kick));
+  if ($('kAll')) $('kAll').onclick = () => kick('others');
 }
 
 // ───────── «طلباتي» + delivery (Task 5) ─────────
@@ -289,12 +373,13 @@ function getPos(ms) {
 }
 const posBody = p => p ? {lat: p.lat, lng: p.lng, acc: p.acc} : {};
 
-// send now; if there is no connection keep it in the queue (same qid → the server writes it once)
+// speed: the action goes into the queue and is sent in the background (same qid → the server writes it once);
+// the screen moves on at once. A refusal by the server shows a loud warning + a note on the home screen.
 async function act(apiName, body, label) {
-  const item = {qid: qid(), api: apiName, body, at: Date.now(), label};
-  const r = await api(apiName, Object.assign({qid: item.qid}, body), 40000);
-  if (r.offline) { queue.push(item); saveQueue(); return {ok: true, queued: true}; }
-  return r;
+  const item = {qid: qid(), api: apiName, body, at: Date.now(), label, bg: true};
+  queue.push(item); saveQueue();
+  setTimeout(flushQueue, 0);
+  return {ok: true, queued: !navigator.onLine};
 }
 
 async function showMine() {
@@ -370,7 +455,7 @@ function logCall(id) {
 async function confirmAppt(id, b) {
   if (!confirm('هل أكّد العميل موعد التسليم اليوم؟')) return;
   b.disabled = true; b.textContent = 'جارٍ التسجيل…';
-  const p = await getPos(6000);
+  const p = lastPos && Date.now() - lastPos.at < 120000 ? lastPos : await getPos(4000);
   const r = await act('callLog', Object.assign({order: id, kind: 'confirm'}, posBody(p)), 'تأكيد موعد الطلب ' + id);
   if (!r.ok) { b.disabled = false; b.textContent = 'أكّد العميل الموعد'; return flash('bad', r.error || 'تعذّر التسجيل'); }
   const c = cardOf(id); if (c) { c.confirmed = true; store.set('sol_mine', mine); }
@@ -381,6 +466,7 @@ async function confirmAppt(id, b) {
 // mandatory: scan a bag of THIS order before any delivery action
 function showDeliverScan(id) {
   const o = cardOf(id); if (!o) return showMine();
+  getPos(8000); // GPS fix ready by the time the action button is pressed
   view('dscan', `<h1>الطلب #${esc(id)}</h1>
     <p><b>${o.exchange ? 'امسح رمز QR على «كيس الرجوع»' : 'امسح رمز QR على أي طرد من طرود هذا الطلب'}</b> للمتابعة إلى التسليم.</p>
     <div id="reader"></div><div class="err" id="camerr"></div>
@@ -443,7 +529,8 @@ async function submitAction(btn, apiName, body, label, onOk) {
     body.crate = c;
   }
   btn.disabled = true; btn.textContent = 'جارٍ تحديد الموقع…';
-  const p = await getPos(10000);
+  // speed: a fix from the last 2 minutes is used at once (GPS is warmed up on «طلباتي» and the scan screen); else wait at most 4 s
+  const p = lastPos && Date.now() - lastPos.at < 120000 ? lastPos : await getPos(4000);
   btn.textContent = 'جارٍ الإرسال…';
   const r = await act(apiName, Object.assign(body, posBody(p)), label);
   if (!r.ok) { btn.disabled = false; btn.textContent = 'إعادة المحاولة'; return flash('bad', r.error || 'تعذّر التسجيل'); }
@@ -774,7 +861,10 @@ function settleSheet(code) {
     const v = val(); if (v == null) { $('sErr').textContent = 'أدخل المبلغ بالأرقام'; return; }
     if (!confirm(`تسجيل ${v >= 0 ? 'استلام ' + money(v) + ' جنيهًا من' : 'دفع ' + money(-v) + ' جنيهًا إلى'} ${c.name}؟`)) return;
     $('sOk').disabled = true; $('sErr').textContent = '';
-    const r = await api('settle', {courier: code, received: v, expect: c.balance, note: $('sNote').value.trim(), qid: qidS}, 40000);
+    const note = $('sNote').value.trim();
+    const r = await apiPin2('تأكيد التسوية — ' + c.name, 'settle', {courier: code, received: v, expect: c.balance, note, qid: qidS});
+    if (!r) return settleSheet(code);
+    if (!$('sOk')) { if (!r.ok) return flash('bad', r.error || 'تعذّر التسجيل'); flash('ok', 'سُجّلت التسوية ✓', r.already ? 'سُجّلت من قبل' : 'الرصيد بعدها ' + money(r.balance) + ' جنيهًا'); return showBoard(); }
     $('sOk').disabled = false;
     if (!r.ok) { $('sErr').textContent = r.offline ? 'التسوية تحتاج اتصالًا بالإنترنت' : (r.error || 'تعذّر التسجيل'); if (r.stale) setTimeout(() => { $('modal').classList.add('hidden'); showBoard(); }, 2500); return; }
     $('modal').classList.add('hidden');
@@ -795,50 +885,79 @@ async function showStaff() {
 }
 function renderStaff() {
   const holds = c => [c.orders ? 'معه ' + c.orders + ' طلب' : '', c.returns ? c.returns + ' مرتجع' : '', c.balance > 0 ? 'معه ' + money(c.balance) + ' ج' : c.balance < 0 ? 'له ' + money(-c.balance) + ' ج' : ''].filter(Boolean).join(' · ');
+  const small = 'style="width:auto;min-height:40px;font-size:15px;margin:0 auto 0 0;padding:4px 12px"';
+  const pend = staff.filter(c => c.pending && !c.admin);
   view('staff', `<h1>إدارة المندوبين</h1>
+    ${pend.length ? `<h2 style="color:var(--bad)">Pending — دخول موقوف (${pend.length})</h2>
+      ${pend.map(c => `<div class="card" style="border-color:var(--bad)">
+        <div class="top"><span class="num">${esc(c.name)}</span><span class="tag miss" style="margin-inline-start:auto">Pending</span></div>
+        <div class="muted">أُدخل رمز خاطئ 3 مرات على حسابه، فتوقف الدخول حتى توافق. التفاصيل في تاب «سجل الدخول».</div>
+        <div class="row"><button class="btn" data-rel="${esc(c.code)}">سماح بالدخول</button><button class="btn terra" data-relpin="${esc(c.code)}">سماح + رمز جديد</button></div>
+      </div>`).join('')}` : ''}
     <button class="btn terra big" id="bAdd">＋ إضافة مندوب جديد</button>
+    ${staff.some(c => !c.admin && c.hasPin) ? '<button class="btn ghost" id="bPins">إظهار رموز الدخول</button>' : ''}
     ${staff.map(c => `<div class="card">
       <div class="top"><span class="num">${esc(c.name)}</span>
-        <span class="tag ${c.admin ? 'ok' : c.active ? 'ok' : 'miss'}" style="margin-inline-start:auto">${c.admin ? 'مدير' : c.active ? 'نشط' : 'موقوف مؤقتًا'}</span></div>
-      <div class="muted">الكود ${esc(c.code)}${holds(c) ? ' · ' + holds(c) : ' · لا شيء معه'}</div>
-      <div class="top" style="margin-top:8px"><span style="font-size:19px;font-weight:700;direction:ltr">${c.phone ? esc(c.phone) : '<span class="muted">لا يوجد رقم</span>'}</span>
-        <button class="btn ghost" style="width:auto;min-height:40px;font-size:15px;margin:0 auto 0 0;padding:4px 12px" data-phone="${esc(c.code)}">${c.phone ? 'تعديل الرقم' : 'إضافة رقم'}</button></div>
-      ${c.phone ? `<div class="row"><a class="btn" href="tel:${esc(c.phone)}">📞 اتصال</a><a class="btn" style="background:#1f7a4d" href="https://wa.me/2${esc(c.phone)}" target="_blank" rel="noopener">واتساب</a></div>` : ''}
-      ${c.admin ? '' : `<div class="top" style="margin-top:4px"><span>رمز الدخول: <b data-pinv="${esc(c.code)}" style="font-size:20px;letter-spacing:3px;direction:ltr;display:inline-block">${c.pin ? '••••••' : '<span class="muted" style="letter-spacing:0">غير محفوظ — اضغط «رمز دخول جديد» مرة واحدة ليُحفظ</span>'}</b></span>
-        ${c.pin ? `<button class="btn ghost" style="width:auto;min-height:40px;font-size:15px;margin:0 auto 0 0;padding:4px 12px" data-show="${esc(c.code)}">إظهار</button>` : ''}</div>`}
-      ${c.admin ? '<div class="muted">حساب المدير لا يُعدَّل من هنا.</div>' : `
-      <button class="btn" data-pin="${esc(c.code)}">رمز دخول جديد</button>
-      <div class="row">
-        ${c.active ? `<button class="btn dark" data-pause="${esc(c.code)}">إيقاف مؤقت</button>` : `<button class="btn" data-resume="${esc(c.code)}">إعادة تفعيل</button>`}
-        <button class="btn ghost" style="color:var(--bad);border-color:var(--bad)" data-remove="${esc(c.code)}">إزالة نهائيًا</button>
-      </div>`}
+        <span class="tag ${c.admin ? 'ok' : c.pending ? 'miss' : c.active ? 'ok' : 'miss'}" style="margin-inline-start:auto">${c.admin ? 'مدير' : c.pending ? 'Pending' : c.active ? 'نشط' : 'موقوف مؤقتًا'}</span></div>
+      <div class="muted">الكود ${esc(c.code)}${holds(c) ? ' · ' + holds(c) : ' · لا شيء معه'}${!c.admin && c.fails ? ' · محاولات خاطئة: ' + c.fails : ''}</div>
+      <div class="top" style="margin-top:8px"><span style="font-size:19px;font-weight:700;direction:ltr">${c.phone ? esc(c.phone) : '<span class="muted">لا يوجد رقم — لن يستطيع الدخول</span>'}</span>
+        ${c.admin ? '' : `<button class="btn ghost" ${small} data-phone="${esc(c.code)}">${c.phone ? 'تعديل الرقم' : 'إضافة رقم'}</button>`}</div>
+      ${c.phone ? `<div class="row"><a class="btn" href="tel:${esc(c.phone)}">اتصال</a><a class="btn" style="background:#1f7a4d" href="https://wa.me/2${esc(c.phone)}" target="_blank" rel="noopener">واتساب</a></div>` : ''}
+      ${c.admin ? '' : `<div class="top" style="margin-top:4px"><span>رمز الدخول: <b data-pinv="${esc(c.code)}" style="font-size:20px;letter-spacing:3px;direction:ltr;display:inline-block">${c.hasPin ? '••••••' : '<span class="muted" style="letter-spacing:0">غير محفوظ — اضغط «رمز دخول جديد» مرة واحدة ليُحفظ</span>'}</b></span></div>`}
+      ${c.admin ? '<div class="muted">حساب المدير لا يُعدَّل من هنا (رمزك الجديد من adminRecover، وأجهزتك من «أجهزتي»).</div>' : `
+      <div class="row"><button class="btn" data-otc="${esc(c.code)}">كود دخول لمرة واحدة</button><button class="btn" data-pin="${esc(c.code)}">رمز دخول جديد</button></div>
+      <div class="row"><button class="btn dark" data-out="${esc(c.code)}">تسجيل خروج من كل الأجهزة</button>
+        ${c.active ? `<button class="btn dark" data-pause="${esc(c.code)}">تعليق الحساب</button>` : `<button class="btn" data-resume="${esc(c.code)}">إعادة تفعيل</button>`}</div>
+      <button class="btn ghost" style="color:var(--bad);border-color:var(--bad)" data-remove="${esc(c.code)}">حذف الحساب (بياناته تفضل محفوظة)</button>`}
     </div>`).join('')}
     <button class="btn ghost" id="back">رجوع إلى اللوحة</button>`);
   $('back').onclick = showBoard;
   $('bAdd').onclick = addStaffSheet;
+  if ($('bPins')) $('bPins').onclick = async () => {
+    const r = await apiPin2('إظهار رموز الدخول', 'staffPins', {});
+    if (!r) return;
+    if (!r.ok) return flash('bad', r.offline ? 'يحتاج اتصالًا بالإنترنت' : (r.error || 'تعذّر التنفيذ'));
+    Object.keys(r.pins).forEach(k => { const el = document.querySelector(`[data-pinv="${k}"]`); if (el && r.pins[k]) el.textContent = r.pins[k]; });
+    $('bPins').classList.add('hidden');
+  };
   const on = (attr, fn) => $('app').querySelectorAll('[data-' + attr + ']').forEach(x => x.onclick = () => fn(staff.find(c => c.code === x.dataset[attr])));
-  on('show', c => {
-    const el = document.querySelector(`[data-pinv="${c.code}"]`), b = document.querySelector(`[data-show="${c.code}"]`);
-    const hidden = el.textContent.indexOf('•') >= 0;
-    el.textContent = hidden ? c.pin : '••••••'; b.textContent = hidden ? 'إخفاء' : 'إظهار';
-  });
   on('phone', c => phoneSheet(c));
-  on('pin', c => staffAct('staffPin', c, `إنشاء رمز دخول جديد لـ ${c.name}؟\n\nالرمز القديم سيتوقف، وسيُسجَّل خروجه من أي موبايل.`));
-  on('pause', c => staffAct('staffPause', c, `إيقاف ${c.name} مؤقتًا؟\n\nلن يستطيع الدخول إلى التطبيق حتى تعيد تفعيله.` + (c.orders ? `\n\nتنبيه: معه ${c.orders} طلب لم ينتهِ، ولن يستطيع تسليمها وهو موقوف.` : '')));
+  on('rel', c => staffAct('staffRelease', c, `السماح لـ ${c.name} بالدخول مرة أخرى بنفس رمزه؟`));
+  on('relpin', c => staffAct('staffRelease', c, `السماح لـ ${c.name} بالدخول مع رمز جديد؟\n\nالرمز القديم سيتوقف.`, {newPin: true}, 'السماح + رمز جديد'));
+  on('otc', c => staffAct('staffOtc', c, `عمل كود دخول لمرة واحدة لـ ${c.name}؟\n\nيدخل به مع رقم موبايله مرة واحدة خلال 15 دقيقة، ورمزه الأصلي لا يتغيّر.`, {}, 'كود دخول لمرة واحدة'));
+  on('pin', c => staffAct('staffPin', c, `إنشاء رمز دخول جديد لـ ${c.name}؟\n\nالرمز القديم سيتوقف، وسيُسجَّل خروجه من أي موبايل.`, {}, 'رمز دخول جديد'));
+  on('out', c => staffAct('staffLogout', c, `تسجيل خروج ${c.name} من كل الأجهزة؟\n\nيقدر يدخل تاني برقمه ورمزه.`));
+  on('pause', c => staffAct('staffPause', c, `تعليق حساب ${c.name}؟\n\nلن يستطيع الدخول حتى تعيد تفعيله.` + (c.orders ? `\n\nتنبيه: معه ${c.orders} طلب لم ينتهِ، ولن يستطيع تسليمها وهو موقوف.` : '')));
   on('resume', c => staffAct('staffResume', c, `إعادة تفعيل ${c.name}؟ سيدخل بالرمز نفسه.`));
   on('remove', c => {
-    if (c.orders || c.returns || c.balance) { flash('bad', 'لا يمكن إزالته الآن', holds(c) + ' — أنهِ ذلك أولًا، أو أوقفه مؤقتًا.'); return; }
-    if (!confirm(`إزالة ${c.name} نهائيًا؟\n\nلن يستطيع الدخول أبدًا، ولن يظهر في القوائم. سجلّه القديم (التسليمات والتسويات) يبقى محفوظًا.`)) return;
-    staffAct('staffRemove', c, `تأكيد أخير: إزالة ${c.name}؟ لا يمكن التراجع عن ذلك.`);
+    if (c.orders || c.returns || c.balance) { flash('bad', 'لا يمكن حذفه الآن', holds(c) + ' — أنهِ ذلك أولًا، أو علّق الحساب.'); return; }
+    if (!confirm(`حذف حساب ${c.name}؟\n\nلن يستطيع الدخول أبدًا، ولن يظهر في القوائم. سجلّه القديم (التسليمات والتسويات والتقييمات) يبقى محفوظًا.`)) return;
+    staffAct('staffRemove', c, `تأكيد أخير: حذف ${c.name}؟ لا يمكن التراجع عن ذلك.`, {}, 'حذف ' + c.name);
   });
 }
-async function staffAct(action, c, question) {
+// pin2Title → the action needs the admin PIN again
+async function staffAct(action, c, question, extra, pin2Title) {
   if (!confirm(question)) return;
-  const r = await api(action, {code: c.code, qid: qid()}, 40000);
+  const body = Object.assign({code: c.code, qid: qid()}, extra || {});
+  const r = pin2Title ? await apiPin2(pin2Title, action, body) : await api(action, body, 40000);
+  if (!r) return;
   if (!r.ok) { flash('bad', r.offline ? 'هذه العملية تحتاج اتصالًا بالإنترنت' : (r.error || 'تعذّر التنفيذ')); return; }
   if (r.pin) { pinSheet(r, false, c.phone); return; }
-  flash('ok', action === 'staffPause' ? 'أُوقف ' + r.name : action === 'staffResume' ? 'أُعيد تفعيل ' + r.name : 'أُزيل ' + r.name);
+  if (r.otc) { otcSheet(r); return; }
+  flash('ok', {staffPause: 'عُلّق حساب ', staffResume: 'أُعيد تفعيل ', staffRemove: 'حُذف حساب ', staffLogout: 'خرج من كل الأجهزة: ', staffRelease: 'سُمح بالدخول: '}[action] + r.name);
   showStaff();
+}
+// one-time login code (shown once; read it to the courier on a call)
+function otcSheet(r) {
+  const msg = `أهلًا ${r.name}،\nكود الدخول لمرة واحدة: ${r.otc}\nادخل برقم موبايلك ${r.phone} والكود ده خلال ${r.minutes} دقيقة.\n${APP_URL}`;
+  $('sheet').innerHTML = `<h2>كود دخول لمرة واحدة — ${esc(r.name)}</h2>
+    <div class="muted">يدخل برقم موبايله + هذا الكود مكان الرمز. يشتغل مرة واحدة خلال ${r.minutes} دقيقة. قوله في مكالمة.</div>
+    <div style="font-size:44px;font-weight:800;letter-spacing:8px;text-align:center;direction:ltr;margin:10px 0">${esc(r.otc)}</div>
+    <a class="btn" href="tel:${esc(r.phone)}">اتصال به</a>
+    <a class="btn" style="background:#1f7a4d" href="${esc('https://wa.me/2' + r.phone + '?text=' + encodeURIComponent(msg))}" target="_blank" rel="noopener">إرساله على واتساب</a>
+    <button class="btn ghost" id="oDone">تم</button>`;
+  $('modal').classList.remove('hidden');
+  $('oDone').onclick = () => { $('modal').classList.add('hidden'); showStaff(); };
 }
 function phoneSheet(c) {
   $('sheet').innerHTML = `<h2>رقم ${esc(c.name)}</h2>
@@ -849,12 +968,12 @@ function phoneSheet(c) {
   $('fNo').onclick = () => $('modal').classList.add('hidden');
   $('fOk').onclick = async () => {
     const phone = $('fPhone').value.replace(/\D/g, '');
-    if (phone && !/^0\d{10}$/.test(phone)) { $('fErr').textContent = 'رقم الموبايل 11 رقمًا ويبدأ بصفر'; return; }
+    if (!/^0\d{10}$/.test(phone)) { $('fErr').textContent = 'رقم الموبايل 11 رقمًا ويبدأ بصفر — المندوب يدخل به'; return; }
     $('fOk').disabled = true;
     const r = await api('staffPhone', {code: c.code, phone}, 40000);
     $('fOk').disabled = false;
     if (!r.ok) { $('fErr').textContent = r.offline ? 'يحتاج اتصالًا بالإنترنت' : (r.error || 'تعذّر الحفظ'); return; }
-    $('modal').classList.add('hidden'); flash('ok', 'حُفظ الرقم ✓'); showStaff();
+    $('modal').classList.add('hidden'); flash('ok', 'حُفظ الرقم ✓', 'سيدخل من جديد بالرقم الجديد'); showStaff();
   };
 }
 function addStaffSheet() {
@@ -869,7 +988,7 @@ function addStaffSheet() {
   $('nOk').onclick = async () => {
     const name = $('nName').value.trim(), phone = $('nPhone').value.replace(/\D/g, '');
     if (name.length < 2) { $('nErr').textContent = 'اكتب اسم المندوب'; return; }
-    if (phone && !/^0\d{10}$/.test(phone)) { $('nErr').textContent = 'رقم الموبايل 11 رقمًا ويبدأ بصفر (أو اتركه فارغًا)'; return; }
+    if (!/^0\d{10}$/.test(phone)) { $('nErr').textContent = 'رقم الموبايل مطلوب: 11 رقمًا ويبدأ بصفر — المندوب يدخل به'; return; }
     $('nOk').disabled = true; $('nErr').textContent = '';
     const r = await api('staffAdd', {name, phone, qid: q}, 40000);
     $('nOk').disabled = false;
@@ -879,10 +998,10 @@ function addStaffSheet() {
 }
 // PIN sheet after add / new PIN (a readable copy is kept server-side for the owner)
 function pinSheet(r, isNew, phone) {
-  const msg = `أهلًا ${r.name}،\nرابط تطبيق مندوبي سوليتا:\n${APP_URL}\nرمز الدخول الخاص بك: ${r.pin}\nلا تعطِ هذا الرمز لأي شخص.`;
+  const msg = `أهلًا ${r.name}،\nرابط تطبيق مندوبي سوليتا:\n${APP_URL}\nادخل برقم موبايلك ${phone || r.phone || ''} والرمز: ${r.pin}\nلا تعطِ هذا الرمز لأي شخص.`;
   const wa = 'https://wa.me/' + (phone ? '2' + phone : '') + '?text=' + encodeURIComponent(msg);
   $('sheet').innerHTML = `<h2>${isNew ? 'أُضيف ' + esc(r.name) + ' ✓' : 'رمز جديد لـ ' + esc(r.name) + ' ✓'}</h2>
-    <div class="muted">رمز الدخول (محفوظ، وتستطيع رؤيته لاحقًا من «إدارة المندوبين» بزر «إظهار»):</div>
+    <div class="muted">رمز الدخول (محفوظ، وتقدر تشوفه بعدين من «إدارة المندوبين» ← «إظهار رموز الدخول»):</div>
     <div style="font-size:44px;font-weight:800;letter-spacing:8px;text-align:center;direction:ltr;margin:10px 0">${esc(r.pin)}</div>
     <a class="btn terra" href="${esc(wa)}" target="_blank" rel="noopener">إرسال الرابط والرمز له على واتساب</a>
     <button class="btn" id="pCopy">نسخ الرسالة</button>
@@ -1034,7 +1153,7 @@ function renderPick() {
     }
     const tag = got < o.total ? `<span class="tag miss">ناقص ${o.total - got}</span>` : o.unv.length ? '<span class="tag unv">لم يُتحقق بعد</span>' : '<span class="tag ok">مكتمل</span>';
     return `<div class="card"><div class="top"><span class="num">#${esc(id)}</span>${tag}<span class="amt">${c.prepaid ? 'مدفوع مسبقًا' : c.amount != null ? money(c.amount) + ' ج' : ''}</span><button class="x" data-rm="${esc(id)}" aria-label="حذف">×</button></div>
-      ${c.customer ? `<div>${esc(c.customer)}</div><div class="muted">${esc(c.city)}${c.area ? ' — ' + esc(c.area) : ''}</div>` : '<div class="muted">سيُتحقق من الطلب عند عودة الاتصال</div>'}
+      ${c.customer ? `<div>${esc(c.customer)}</div><div class="muted">${esc(c.city)}${c.area ? ' — ' + esc(c.area) : ''}</div>` : `<div class="muted">${verifying[id] ? 'جارٍ التحقق من الطلب…' : 'سيُتحقق من الطلب عند عودة الاتصال'}</div>`}
       <div class="chips">${chips.join('')}</div></div>`;
   }).join('');
   el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
@@ -1088,22 +1207,30 @@ async function handleCode(text) {
   if (!m || +m[2] < 1 || +m[2] > +m[3]) return flash('bad', 'هذا ليس رمز بوليصة سوليتا', 'امسح رمز QR الموجود على البوليصة أو أدخل رقم الطلب');
   const id = m[1], total = +m[3], code = `SOL:${id}-${+m[2]}/${total}`, o = pick.orders[id];
   if (o && (o.bags.includes(code) || o.unv.includes(code))) return flash('info', 'مسحت هذا الطرد من قبل', `الطلب ${id} — الطرد ${+m[2]} من ${total}`);
-  busy = true;
-  const r = await api('pickupScan', {code});
-  busy = false;
-  if (current !== 'pickup') return;
-  if (r.offline) {
-    const x = pick.orders[id] = pick.orders[id] || {card: null, total, bags: [], unv: []};
-    if (x.total !== total) return flash('bad', 'هذا الطرد لا يطابق طرود الطلب نفسه', 'عدد الطرود مختلف في البوليصتين');
-    x.unv.push(code); savePick(); renderPick();
-    return flash('info', `طرد ${+m[2]} من ${total} — الطلب ${id}`, 'لا يوجد اتصال: سيُتحقق منه عند الإرسال');
-  }
-  if (!r.ok) return flash('bad', r.error || 'حدث خطأ');
-  if (r.kind === 'block') return flash('bad', r.msg, 'الطلب ' + id);
-  if (r.kind === 'mine') return flash('info', r.msg, 'الطلب ' + id);
-  addBags(r.order, [code]);
-  const x = pick.orders[id], got = x.bags.length + x.unv.length;
+  if (o && o.total !== total) return flash('bad', 'هذا الطرد لا يطابق طرود الطلب نفسه', 'عدد الطرود مختلف في البوليصتين');
+  // speed: the bag is added at once; the server checks the ORDER once in the background (later bags of a checked order need no call)
+  const x = pick.orders[id] = o || {card: null, total, bags: [], unv: []};
+  if (x.card) x.bags.push(code); else x.unv.push(code);
+  savePick(); renderPick();
+  const got = x.bags.length + x.unv.length;
   flash('ok', `طرد ${+m[2]} من ${total} — الطلب ${id}`, got < x.total ? `هذا الطلب ${x.total} طرود، مسحت ${got} فقط` : 'اكتمل الطلب ✓');
+  if (!x.card) verifyOrder(id, code);
+}
+// background check of a newly scanned order; a refusal removes the order's bags with a loud warning
+const verifying = {};
+async function verifyOrder(id, code) {
+  if (verifying[id]) return;
+  verifying[id] = true;
+  const r = await api('pickupScan', {code});
+  delete verifying[id];
+  const x = pick && pick.orders[id];
+  if (!x) return;
+  if (r.offline) return; // stays «لم يُتحقق» → the server checks it at confirm (as before)
+  const drop = (title, sub) => { delete pick.orders[id]; savePick(); if (current === 'pickup') renderPick(); flash('bad', title, sub); };
+  if (!r.ok) return drop('الطلب ' + id + ': ' + (r.error || 'حدث خطأ'), 'أُزيلت طروده من القائمة — لا تستلمه');
+  if (r.kind === 'block') return drop(r.msg, 'الطلب ' + id + ' — أُزيلت طروده من القائمة');
+  if (r.kind === 'mine') { delete pick.orders[id]; savePick(); if (current === 'pickup') renderPick(); return flash('info', r.msg, 'الطلب ' + id); }
+  addBags(r.order, x.unv.slice()); // includes bags scanned while the check was running; the server re-checks every bag at confirm
 }
 
 function addBags(card, codes) {
