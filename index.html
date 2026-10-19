@@ -100,7 +100,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 'use strict';
-const VERSION = '2.0.0';
+const VERSION = '2.0.1';
 const EXEC = 'https://script.google.com/macros/s/AKfycbwQpeRNIZcJqbScldWADntOBWfO3SmD4j-5GZx0fJeKkiSlVyKjObt24UFFRYxpnvuwWg/exec';
 const PRINT_URL = EXEC + '?p=print';
 const $ = id => document.getElementById(id);
@@ -895,7 +895,8 @@ function renderStaff() {
         <div class="row"><button class="btn" data-rel="${esc(c.code)}">سماح بالدخول</button><button class="btn terra" data-relpin="${esc(c.code)}">سماح + رمز جديد</button></div>
       </div>`).join('')}` : ''}
     <button class="btn terra big" id="bAdd">＋ إضافة مندوب جديد</button>
-    ${staff.some(c => !c.admin && c.hasPin) ? '<button class="btn ghost" id="bPins">إظهار رموز الدخول</button>' : ''}
+    ${staff.some(c => !c.admin) ? (staff.some(c => !c.admin && c.hasPin) ? '<button class="btn ghost" id="bPins">إظهار رموز الدخول</button>'
+      : '<div class="banner" style="background:#fbeed6;color:var(--warn)">لا يوجد رمز محفوظ لأي مندوب حتى الآن (الرموز القديمة كانت تُحفظ مشفّرة فقط). اضغط «رمز دخول جديد» عند المندوب مرة واحدة، فيُحفظ ويظهر هنا بعد ذلك.</div>') : ''}
     ${staff.map(c => `<div class="card">
       <div class="top"><span class="num">${esc(c.name)}</span>
         <span class="tag ${c.admin ? 'ok' : c.pending ? 'miss' : c.active ? 'ok' : 'miss'}" style="margin-inline-start:auto">${c.admin ? 'مدير' : c.pending ? 'Pending' : c.active ? 'نشط' : 'موقوف مؤقتًا'}</span></div>
